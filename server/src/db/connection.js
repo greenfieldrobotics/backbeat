@@ -1,24 +1,25 @@
-import Database from 'better-sqlite3';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import { initializeDatabase } from './schema.js';
+import pg from 'pg';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DB_PATH = path.join(__dirname, '..', '..', 'data', 'backbeat.db');
+// Parse NUMERIC (OID 1700) as JavaScript floats instead of strings
+pg.types.setTypeParser(1700, parseFloat);
 
-let db = null;
+const pool = new pg.Pool({
+  connectionString: process.env.DATABASE_URL || 'postgres://backbeat:backbeat@localhost:5432/backbeat',
+});
 
-export function getDb() {
-  if (!db) {
-    db = new Database(DB_PATH);
-    initializeDatabase(db);
-  }
-  return db;
+/** Run a single query. Params use $1, $2, ... placeholders. */
+export async function query(sql, params) {
+  return pool.query(sql, params);
 }
 
-export function closeDb() {
-  if (db) {
-    db.close();
-    db = null;
-  }
+/** Get a dedicated client from the pool (for transactions). Call client.release() when done. */
+export async function getClient() {
+  return pool.connect();
 }
+
+/** Gracefully close the pool (for shutdown). */
+export async function closePool() {
+  await pool.end();
+}
+
+export default pool;

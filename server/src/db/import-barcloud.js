@@ -6,7 +6,10 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { getDb, closeDb } from './connection.js';
+import pg from 'pg';
+import { initializeDatabase } from './schema.js';
+
+pg.types.setTypeParser(1700, parseFloat);
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -128,7 +131,10 @@ if (!fs.existsSync(csvPath)) {
   process.exit(1);
 }
 
-const db = getDb();
+const pool = new pg.Pool({
+  connectionString: process.env.DATABASE_URL || 'postgres://backbeat:backbeat@localhost:5432/backbeat',
+});
+
 const csvContent = fs.readFileSync(csvPath, 'utf-8');
 const rows = parseCSV(csvContent);
 
@@ -136,7 +142,8 @@ console.log(`Loaded ${rows.length} rows from BarCloud history`);
 
 // --- Step 1: Find and auto-create missing parts ---
 const existingParts = new Map();
-for (const p of db.prepare('SELECT id, part_number FROM parts').all()) {
+const { rows: partsRows } = await pool.query('SELECT id, part_number FROM parts');
+for (const p of partsRows) {
   existingParts.set(p.part_number, p.id);
 }
 
@@ -153,18 +160,17 @@ for (const row of rows) {
 
 if (missingParts.size > 0) {
   console.log(`\nCreating ${missingParts.size} missing parts from BarCloud history:`);
-  const insertPart = db.prepare(`
-    INSERT INTO parts (part_number, description, unit_of_measure, classification)
-    VALUES (?, ?, 'EA', ?)
-  `);
   for (const pn of [...missingParts].sort()) {
     const prefix = pn.substring(0, 3);
     const classification = CLASSIFICATION_MAP[prefix] || 'General';
     const description = `(Imported from BarCloud - no description available)`;
-    insertPart.run(pn, description, classification);
-    const newId = db.prepare('SELECT id FROM parts WHERE part_number = ?').get(pn).id;
-    existingParts.set(pn, newId);
-    console.log(`  + ${pn} → id ${newId} (${classification})`);
+    await pool.query(
+      'INSERT INTO parts (part_number, description, unit_of_measure, classification) VALUES ($1, $2, $3, $4)',
+      [pn, description, 'EA', classification]
+    );
+    const { rows: newRows } = await pool.query('SELECT id FROM parts WHERE part_number = $1', [pn]);
+    existingParts.set(pn, newRows[0].id);
+    console.log(`  + ${pn} → id ${newRows[0].id} (${classification})`);
   }
 }
 
@@ -224,38 +230,64 @@ console.log(`\nParsed ${transactions.length} transactions (${skipped} skipped)`)
 console.log(`Date range: ${transactions[0]?.date} to ${transactions[transactions.length - 1]?.date}`);
 
 // --- Step 3: Replay transactions ---
-// Prepared statements
-const stmts = {
-  getInventory: db.prepare('SELECT * FROM inventory WHERE part_id = ? AND location_id = ?'),
-  insertInventory: db.prepare('INSERT INTO inventory (part_id, location_id, quantity_on_hand) VALUES (?, ?, ?)'),
-  updateInventory: db.prepare('UPDATE inventory SET quantity_on_hand = quantity_on_hand + ? WHERE part_id = ? AND location_id = ?'),
-  insertFifoLayer: db.prepare(`
-    INSERT INTO fifo_layers (part_id, location_id, source_type, source_ref, original_qty, remaining_qty, unit_cost, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `),
-  getFifoLayers: db.prepare(`
-    SELECT * FROM fifo_layers
-    WHERE part_id = ? AND location_id = ? AND remaining_qty > 0
-    ORDER BY created_at ASC, id ASC
-  `),
-  consumeFifoLayer: db.prepare('UPDATE fifo_layers SET remaining_qty = remaining_qty - ? WHERE id = ?'),
-  insertTransaction: db.prepare(`
-    INSERT INTO inventory_transactions (transaction_type, part_id, location_id, to_location_id, quantity, unit_cost, total_cost, reference_type, target_ref, reason, fifo_layers_consumed, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, 'BARCLOUD_IMPORT', ?, ?, ?, ?)
-  `),
-};
+// Helper functions using a dedicated client for the whole import transaction
+const client = await pool.connect();
 
-function upsertInventory(partId, locationId, qtyDelta) {
-  const inv = stmts.getInventory.get(partId, locationId);
+async function getInventory(partId, locationId) {
+  const { rows } = await client.query(
+    'SELECT * FROM inventory WHERE part_id = $1 AND location_id = $2',
+    [partId, locationId]
+  );
+  return rows[0] || null;
+}
+
+async function upsertInventory(partId, locationId, qtyDelta) {
+  const inv = await getInventory(partId, locationId);
   if (inv) {
-    stmts.updateInventory.run(qtyDelta, partId, locationId);
+    await client.query(
+      'UPDATE inventory SET quantity_on_hand = quantity_on_hand + $1 WHERE part_id = $2 AND location_id = $3',
+      [qtyDelta, partId, locationId]
+    );
   } else {
-    stmts.insertInventory.run(partId, locationId, qtyDelta);
+    await client.query(
+      'INSERT INTO inventory (part_id, location_id, quantity_on_hand) VALUES ($1, $2, $3)',
+      [partId, locationId, qtyDelta]
+    );
   }
 }
 
-function consumeFifo(partId, locationId, quantity) {
-  const layers = stmts.getFifoLayers.all(partId, locationId);
+async function insertFifoLayer(partId, locationId, sourceType, sourceRef, originalQty, remainingQty, unitCost, createdAt) {
+  await client.query(`
+    INSERT INTO fifo_layers (part_id, location_id, source_type, source_ref, original_qty, remaining_qty, unit_cost, created_at)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+  `, [partId, locationId, sourceType, sourceRef, originalQty, remainingQty, unitCost, createdAt]);
+}
+
+async function getFifoLayers(partId, locationId) {
+  const { rows } = await client.query(`
+    SELECT * FROM fifo_layers
+    WHERE part_id = $1 AND location_id = $2 AND remaining_qty > 0
+    ORDER BY created_at ASC, id ASC
+  `, [partId, locationId]);
+  return rows;
+}
+
+async function consumeFifoLayer(consumeQty, layerId) {
+  await client.query(
+    'UPDATE fifo_layers SET remaining_qty = remaining_qty - $1 WHERE id = $2',
+    [consumeQty, layerId]
+  );
+}
+
+async function insertTransaction(txType, partId, locationId, toLocationId, qty, unitCost, totalCost, targetRef, reason, fifoConsumed, createdAt) {
+  await client.query(`
+    INSERT INTO inventory_transactions (transaction_type, part_id, location_id, to_location_id, quantity, unit_cost, total_cost, reference_type, target_ref, reason, fifo_layers_consumed, created_at)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, 'BARCLOUD_IMPORT', $8, $9, $10, $11)
+  `, [txType, partId, locationId, toLocationId, qty, unitCost, totalCost, targetRef, reason, fifoConsumed, createdAt]);
+}
+
+async function consumeFifo(partId, locationId, quantity) {
+  const layers = await getFifoLayers(partId, locationId);
   let remaining = quantity;
   let totalCost = 0;
   const consumed = [];
@@ -265,7 +297,7 @@ function consumeFifo(partId, locationId, quantity) {
     const consumeQty = Math.min(remaining, layer.remaining_qty);
     const consumeCost = consumeQty * layer.unit_cost;
 
-    stmts.consumeFifoLayer.run(consumeQty, layer.id);
+    await consumeFifoLayer(consumeQty, layer.id);
     consumed.push({
       layer_id: layer.id,
       quantity_consumed: consumeQty,
@@ -277,9 +309,6 @@ function consumeFifo(partId, locationId, quantity) {
   }
 
   if (remaining > 0) {
-    // Not enough FIFO layers — this happens when BarCloud data has issues
-    // (e.g., adjustments created inventory without layers)
-    // We'll log it and create a "gap" note
     return { consumed, totalCost, shortfall: remaining };
   }
   return { consumed, totalCost, shortfall: 0 };
@@ -288,20 +317,19 @@ function consumeFifo(partId, locationId, quantity) {
 const counts = { Receive: 0, Issue: 0, Move: 0, Dispose: 0, Return: 0, Adjust: 0 };
 const warnings = [];
 
-const importAll = db.transaction(() => {
+try {
+  await client.query('BEGIN');
+
   for (const tx of transactions) {
     switch (tx.txType) {
       case 'Receive': {
-        const locationId = tx.toLocationId || 1; // Default to Main Warehouse
-        // Create FIFO layer
-        stmts.insertFifoLayer.run(
+        const locationId = tx.toLocationId || 1;
+        await insertFifoLayer(
           tx.partId, locationId, 'PO_RECEIPT', `BC-Import-${tx.date}`,
           tx.quantity, tx.quantity, tx.unitCost, tx.date
         );
-        // Update inventory
-        upsertInventory(tx.partId, locationId, tx.quantity);
-        // Audit trail
-        stmts.insertTransaction.run(
+        await upsertInventory(tx.partId, locationId, tx.quantity);
+        await insertTransaction(
           'RECEIVE', tx.partId, locationId, null,
           tx.quantity, tx.unitCost, tx.quantity * tx.unitCost,
           null, null, null, tx.date
@@ -312,25 +340,23 @@ const importAll = db.transaction(() => {
 
       case 'Issue': {
         const locationId = tx.fromLocationId || 1;
-        const { consumed, totalCost, shortfall } = consumeFifo(tx.partId, locationId, tx.quantity);
+        const { consumed, totalCost, shortfall } = await consumeFifo(tx.partId, locationId, tx.quantity);
 
         if (shortfall > 0) {
-          // Create a synthetic FIFO layer for the shortfall using the CSV cost
-          stmts.insertFifoLayer.run(
+          await insertFifoLayer(
             tx.partId, locationId, 'ADJUSTMENT', `BC-Gap-${tx.date}`,
             shortfall, shortfall, tx.unitCost, tx.date
           );
-          const gapResult = consumeFifo(tx.partId, locationId, shortfall);
+          const gapResult = await consumeFifo(tx.partId, locationId, shortfall);
           consumed.push(...gapResult.consumed);
           warnings.push(`  FIFO gap: ${tx.partNumber} @ loc ${locationId}, short ${shortfall} on ${tx.date} (created gap layer)`);
-          // Also need to add the gap qty to inventory before subtracting
-          upsertInventory(tx.partId, locationId, shortfall);
+          await upsertInventory(tx.partId, locationId, shortfall);
         }
 
         const avgCost = consumed.length > 0 ? (totalCost + (shortfall * tx.unitCost)) / tx.quantity : tx.unitCost;
-        upsertInventory(tx.partId, locationId, -tx.quantity);
+        await upsertInventory(tx.partId, locationId, -tx.quantity);
 
-        stmts.insertTransaction.run(
+        await insertTransaction(
           'ISSUE', tx.partId, locationId, null,
           -tx.quantity, avgCost, -(tx.quantity * avgCost),
           null, tx.reason, JSON.stringify(consumed), tx.date
@@ -347,32 +373,31 @@ const importAll = db.transaction(() => {
           break;
         }
 
-        const { consumed, totalCost, shortfall } = consumeFifo(tx.partId, fromId, tx.quantity);
+        const { consumed, totalCost, shortfall } = await consumeFifo(tx.partId, fromId, tx.quantity);
 
         if (shortfall > 0) {
-          stmts.insertFifoLayer.run(
+          await insertFifoLayer(
             tx.partId, fromId, 'ADJUSTMENT', `BC-Gap-${tx.date}`,
             shortfall, shortfall, tx.unitCost, tx.date
           );
-          const gapResult = consumeFifo(tx.partId, fromId, shortfall);
+          const gapResult = await consumeFifo(tx.partId, fromId, shortfall);
           consumed.push(...gapResult.consumed);
-          upsertInventory(tx.partId, fromId, shortfall);
+          await upsertInventory(tx.partId, fromId, shortfall);
           warnings.push(`  FIFO gap: ${tx.partNumber} @ loc ${fromId}, short ${shortfall} for Move on ${tx.date}`);
         }
 
-        // Create new layers at destination from consumed layers
         for (const c of consumed) {
-          stmts.insertFifoLayer.run(
+          await insertFifoLayer(
             tx.partId, toId, 'PO_RECEIPT', `BC-Move-${tx.date}`,
             c.quantity_consumed, c.quantity_consumed, c.unit_cost, tx.date
           );
         }
 
-        upsertInventory(tx.partId, fromId, -tx.quantity);
-        upsertInventory(tx.partId, toId, tx.quantity);
+        await upsertInventory(tx.partId, fromId, -tx.quantity);
+        await upsertInventory(tx.partId, toId, tx.quantity);
 
         const avgCost = tx.quantity > 0 ? (totalCost + (shortfall * tx.unitCost)) / tx.quantity : tx.unitCost;
-        stmts.insertTransaction.run(
+        await insertTransaction(
           'MOVE', tx.partId, fromId, toId,
           tx.quantity, avgCost, tx.quantity * avgCost,
           null, null, JSON.stringify(consumed), tx.date
@@ -383,23 +408,23 @@ const importAll = db.transaction(() => {
 
       case 'Dispose': {
         const locationId = tx.fromLocationId || 1;
-        const { consumed, totalCost, shortfall } = consumeFifo(tx.partId, locationId, tx.quantity);
+        const { consumed, totalCost, shortfall } = await consumeFifo(tx.partId, locationId, tx.quantity);
 
         if (shortfall > 0) {
-          stmts.insertFifoLayer.run(
+          await insertFifoLayer(
             tx.partId, locationId, 'ADJUSTMENT', `BC-Gap-${tx.date}`,
             shortfall, shortfall, tx.unitCost, tx.date
           );
-          const gapResult = consumeFifo(tx.partId, locationId, shortfall);
+          const gapResult = await consumeFifo(tx.partId, locationId, shortfall);
           consumed.push(...gapResult.consumed);
-          upsertInventory(tx.partId, locationId, shortfall);
+          await upsertInventory(tx.partId, locationId, shortfall);
           warnings.push(`  FIFO gap: ${tx.partNumber} @ loc ${locationId}, short ${shortfall} for Dispose on ${tx.date}`);
         }
 
         const avgCost = consumed.length > 0 ? (totalCost + (shortfall * tx.unitCost)) / tx.quantity : tx.unitCost;
-        upsertInventory(tx.partId, locationId, -tx.quantity);
+        await upsertInventory(tx.partId, locationId, -tx.quantity);
 
-        stmts.insertTransaction.run(
+        await insertTransaction(
           'DISPOSE', tx.partId, locationId, null,
           -tx.quantity, avgCost, -(tx.quantity * avgCost),
           null, 'BarCloud disposal', JSON.stringify(consumed), tx.date
@@ -410,14 +435,13 @@ const importAll = db.transaction(() => {
 
       case 'Return': {
         const locationId = tx.toLocationId || 1;
-        // Create new FIFO layer for returned items
-        stmts.insertFifoLayer.run(
+        await insertFifoLayer(
           tx.partId, locationId, 'RETURN', `BC-Return-${tx.date}`,
           tx.quantity, tx.quantity, tx.unitCost, tx.date
         );
-        upsertInventory(tx.partId, locationId, tx.quantity);
+        await upsertInventory(tx.partId, locationId, tx.quantity);
 
-        stmts.insertTransaction.run(
+        await insertTransaction(
           'RETURN', tx.partId, locationId, null,
           tx.quantity, tx.unitCost, tx.quantity * tx.unitCost,
           null, tx.reason, null, tx.date
@@ -427,45 +451,39 @@ const importAll = db.transaction(() => {
       }
 
       case 'Adjust': {
-        // Adjustments set inventory to an absolute value in BarCloud,
-        // but the CSV gives us the quantity change (delta).
-        // We treat positive adjustments as new FIFO layers,
-        // negative adjustments as FIFO consumption.
         const locationId = tx.fromLocationId || tx.toLocationId || 1;
 
         if (tx.quantity >= 0) {
-          // Positive adjustment — create a new layer
-          stmts.insertFifoLayer.run(
+          await insertFifoLayer(
             tx.partId, locationId, 'ADJUSTMENT', `BC-Adjust-${tx.date}`,
             tx.quantity, tx.quantity, tx.unitCost, tx.date
           );
-          upsertInventory(tx.partId, locationId, tx.quantity);
+          await upsertInventory(tx.partId, locationId, tx.quantity);
 
-          stmts.insertTransaction.run(
+          await insertTransaction(
             'ADJUSTMENT', tx.partId, locationId, null,
             tx.quantity, tx.unitCost, tx.quantity * tx.unitCost,
             null, 'Physical count (BarCloud)', null, tx.date
           );
         } else {
-          // Negative adjustment — consume FIFO layers
           const absQty = Math.abs(tx.quantity);
-          const { consumed, totalCost, shortfall } = consumeFifo(tx.partId, locationId, absQty);
+          const { consumed, totalCost, shortfall } = await consumeFifo(tx.partId, locationId, absQty);
 
           if (shortfall > 0) {
-            stmts.insertFifoLayer.run(
+            await insertFifoLayer(
               tx.partId, locationId, 'ADJUSTMENT', `BC-Gap-${tx.date}`,
               shortfall, shortfall, tx.unitCost, tx.date
             );
-            const gapResult = consumeFifo(tx.partId, locationId, shortfall);
+            const gapResult = await consumeFifo(tx.partId, locationId, shortfall);
             consumed.push(...gapResult.consumed);
-            upsertInventory(tx.partId, locationId, shortfall);
+            await upsertInventory(tx.partId, locationId, shortfall);
             warnings.push(`  FIFO gap: ${tx.partNumber} @ loc ${locationId}, short ${shortfall} for Adjust on ${tx.date}`);
           }
 
-          upsertInventory(tx.partId, locationId, -absQty);
+          await upsertInventory(tx.partId, locationId, -absQty);
 
           const avgCost = consumed.length > 0 ? (totalCost + (shortfall * tx.unitCost)) / absQty : tx.unitCost;
-          stmts.insertTransaction.run(
+          await insertTransaction(
             'ADJUSTMENT', tx.partId, locationId, null,
             -absQty, avgCost, -(absQty * avgCost),
             null, 'Physical count (BarCloud)', JSON.stringify(consumed), tx.date
@@ -479,14 +497,15 @@ const importAll = db.transaction(() => {
         warnings.push(`  Unknown transaction type: ${tx.txType} for ${tx.partNumber} on ${tx.date}`);
     }
   }
-});
 
-try {
-  importAll();
+  await client.query('COMMIT');
   console.log('\nImport completed successfully!');
 } catch (err) {
+  await client.query('ROLLBACK');
   console.error('\nImport FAILED:', err.message);
   console.error(err.stack);
+  client.release();
+  await pool.end();
   process.exit(1);
 }
 
@@ -504,27 +523,29 @@ if (warnings.length > 0) {
   }
 }
 
-// Final inventory state
-const invSummary = db.prepare(`
+// Final inventory state (use pool, client is still held)
+client.release();
+
+const { rows: invSummary } = await pool.query(`
   SELECT COUNT(DISTINCT part_id) as parts, COUNT(*) as rows, SUM(quantity_on_hand) as total_qty
   FROM inventory WHERE quantity_on_hand > 0
-`).get();
+`);
 
-const fifoSummary = db.prepare(`
+const { rows: fifoSummary } = await pool.query(`
   SELECT COUNT(*) as layers, SUM(remaining_qty) as total_qty, SUM(remaining_qty * unit_cost) as total_value
   FROM fifo_layers WHERE remaining_qty > 0
-`).get();
+`);
 
 console.log('\nFinal inventory state:');
-console.log(`  Parts with stock: ${invSummary.parts}`);
-console.log(`  Inventory rows: ${invSummary.rows}`);
-console.log(`  Total items on hand: ${invSummary.total_qty}`);
-console.log(`  Active FIFO layers: ${fifoSummary.layers}`);
-console.log(`  Total FIFO qty: ${fifoSummary.total_qty}`);
-console.log(`  Total inventory value: $${fifoSummary.total_value?.toFixed(2) || '0.00'}`);
+console.log(`  Parts with stock: ${invSummary[0].parts}`);
+console.log(`  Inventory rows: ${invSummary[0].rows}`);
+console.log(`  Total items on hand: ${invSummary[0].total_qty}`);
+console.log(`  Active FIFO layers: ${fifoSummary[0].layers}`);
+console.log(`  Total FIFO qty: ${fifoSummary[0].total_qty}`);
+console.log(`  Total inventory value: $${fifoSummary[0].total_value?.toFixed(2) || '0.00'}`);
 
 // Verify inventory matches FIFO layers
-const mismatches = db.prepare(`
+const { rows: mismatches } = await pool.query(`
   SELECT i.part_id, p.part_number, i.location_id, l.name as location_name,
     i.quantity_on_hand as inv_qty,
     COALESCE(f.fifo_qty, 0) as fifo_qty
@@ -537,7 +558,7 @@ const mismatches = db.prepare(`
     GROUP BY part_id, location_id
   ) f ON i.part_id = f.part_id AND i.location_id = f.location_id
   WHERE i.quantity_on_hand != COALESCE(f.fifo_qty, 0)
-`).all();
+`);
 
 if (mismatches.length > 0) {
   console.log(`\nINVENTORY/FIFO MISMATCHES (${mismatches.length}):`);
@@ -548,4 +569,4 @@ if (mismatches.length > 0) {
   console.log('\nInventory/FIFO integrity check: PASSED (all quantities match)');
 }
 
-closeDb();
+await pool.end();

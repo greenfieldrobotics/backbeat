@@ -1,35 +1,50 @@
+// Seed script for fresh PostgreSQL databases
+// Reads parts from the item master CSV, creates locations and suppliers
+//
+// Usage: node src/db/seed.js
+
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { getDb, closeDb } from './connection.js';
+import pg from 'pg';
+import { initializeDatabase } from './schema.js';
+
+pg.types.setTypeParser(1700, parseFloat);
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dataDir = path.join(__dirname, '..', '..', 'data');
 
-// Ensure data directory exists
-if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir, { recursive: true });
+const pool = new pg.Pool({
+  connectionString: process.env.DATABASE_URL || 'postgres://backbeat:backbeat@localhost:5432/backbeat',
+});
+
+const client = await pool.connect();
+
+try {
+  await client.query('BEGIN');
+
+  // Drop and recreate tables
+  await client.query(`
+    DROP TABLE IF EXISTS inventory_transactions CASCADE;
+    DROP TABLE IF EXISTS fifo_layers CASCADE;
+    DROP TABLE IF EXISTS inventory CASCADE;
+    DROP TABLE IF EXISTS po_line_items CASCADE;
+    DROP TABLE IF EXISTS purchase_orders CASCADE;
+    DROP TABLE IF EXISTS suppliers CASCADE;
+    DROP TABLE IF EXISTS parts CASCADE;
+    DROP TABLE IF EXISTS locations CASCADE;
+  `);
+
+  await client.query('COMMIT');
+} catch (err) {
+  await client.query('ROLLBACK');
+  throw err;
+} finally {
+  client.release();
 }
 
-const db = getDb();
-
-// Drop and recreate tables to handle schema changes
-db.pragma('foreign_keys = OFF');
-db.exec(`
-  DROP TABLE IF EXISTS inventory_transactions;
-  DROP TABLE IF EXISTS fifo_layers;
-  DROP TABLE IF EXISTS inventory;
-  DROP TABLE IF EXISTS po_line_items;
-  DROP TABLE IF EXISTS purchase_orders;
-  DROP TABLE IF EXISTS suppliers;
-  DROP TABLE IF EXISTS parts;
-  DROP TABLE IF EXISTS locations;
-`);
-db.pragma('foreign_keys = ON');
-
-// Re-import schema to recreate tables
-const { initializeDatabase } = await import('./schema.js');
-initializeDatabase(db);
+// Re-create schema
+await initializeDatabase(pool);
 
 // --- Load Item Master from CSV ---
 const csvPath = path.join(dataDir, 'item_master.csv');
@@ -102,15 +117,13 @@ function parseCost(str) {
   return isNaN(val) ? null : val;
 }
 
-const insertPart = db.prepare(`
-  INSERT INTO parts (part_number, description, unit_of_measure, classification, cost, cost_125, cost_600, mfg_part_number, manufacturer, reseller, reseller_part_number, notes)
-  VALUES (?, ?, 'EA', ?, ?, ?, ?, ?, ?, ?, ?, ?)
-`);
-
 let partCount = 0;
 let skipped = 0;
 
-const insertParts = db.transaction(() => {
+const seedClient = await pool.connect();
+try {
+  await seedClient.query('BEGIN');
+
   for (const row of records) {
     const pn = (row['GFR Part Num'] || '').trim();
     if (!pn) continue;
@@ -128,54 +141,70 @@ const insertParts = db.transaction(() => {
     const notes = (row['Notes'] || '').trim() || null;
 
     try {
-      insertPart.run(pn, description, classification, cost, cost125, cost600, mfgPartNum, manufacturer, reseller, resellerPartNum, notes);
+      await seedClient.query(`
+        INSERT INTO parts (part_number, description, unit_of_measure, classification, cost, cost_125, cost_600, mfg_part_number, manufacturer, reseller, reseller_part_number, notes)
+        VALUES ($1, $2, 'EA', $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        ON CONFLICT (part_number) DO NOTHING
+      `, [pn, description, classification, cost, cost125, cost600, mfgPartNum, manufacturer, reseller, resellerPartNum, notes]);
       partCount++;
     } catch (err) {
-      if (err.message.includes('UNIQUE constraint')) {
+      if (err.code === '23505') {
         skipped++;
       } else {
         throw err;
       }
     }
   }
-});
 
-insertParts();
+  // --- Seed Locations ---
+  const locations = [
+    ['Main Warehouse', 'Warehouse'],
+    ['Kansas Regional', 'Regional Site'],
+    ['Texas Regional', 'Regional Site'],
+    ['CM - FlexAssembly', 'Contract Manufacturer'],
+  ];
+  for (const [name, type] of locations) {
+    await seedClient.query(
+      'INSERT INTO locations (name, type) VALUES ($1, $2) ON CONFLICT (name) DO NOTHING',
+      [name, type]
+    );
+  }
 
-// --- Seed Locations ---
-const insertLocation = db.prepare('INSERT INTO locations (name, type) VALUES (?, ?)');
-const locations = [
-  ['Main Warehouse', 'Warehouse'],
-  ['Kansas Regional', 'Regional Site'],
-  ['Texas Regional', 'Regional Site'],
-  ['CM - FlexAssembly', 'Contract Manufacturer'],
-];
-locations.forEach(([name, type]) => insertLocation.run(name, type));
+  // --- Seed Suppliers from unique manufacturers ---
+  const { rows: manufacturers } = await seedClient.query(
+    "SELECT DISTINCT manufacturer FROM parts WHERE manufacturer IS NOT NULL AND manufacturer != '' ORDER BY manufacturer"
+  );
+  let supplierCount = 0;
+  for (const row of manufacturers) {
+    await seedClient.query(
+      'INSERT INTO suppliers (name) VALUES ($1) ON CONFLICT (name) DO NOTHING',
+      [row.manufacturer]
+    );
+    supplierCount++;
+  }
 
-// --- Seed Suppliers from unique manufacturers in the item master ---
-const manufacturers = db.prepare(
-  "SELECT DISTINCT manufacturer FROM parts WHERE manufacturer IS NOT NULL AND manufacturer != '' ORDER BY manufacturer"
-).all();
-const insertSupplier = db.prepare('INSERT OR IGNORE INTO suppliers (name) VALUES (?)');
-let supplierCount = 0;
-for (const row of manufacturers) {
-  insertSupplier.run(row.manufacturer);
-  supplierCount++;
+  await seedClient.query('COMMIT');
+
+  // --- Summary ---
+  const { rows: classificationCounts } = await pool.query(
+    'SELECT classification, COUNT(*) as count FROM parts GROUP BY classification ORDER BY classification'
+  );
+
+  console.log('Seed data loaded successfully.');
+  console.log(`  - ${partCount} parts loaded from item master (${skipped} duplicates skipped)`);
+  console.log(`  - ${locations.length} locations`);
+  console.log(`  - ${supplierCount} suppliers (auto-populated from manufacturers)`);
+  console.log('');
+  console.log('Parts by classification:');
+  for (const row of classificationCounts) {
+    console.log(`  ${row.classification}: ${row.count}`);
+  }
+} catch (err) {
+  await seedClient.query('ROLLBACK');
+  console.error('Seed failed:', err);
+  process.exit(1);
+} finally {
+  seedClient.release();
 }
 
-// --- Summary ---
-const classificationCounts = db.prepare(
-  'SELECT classification, COUNT(*) as count FROM parts GROUP BY classification ORDER BY classification'
-).all();
-
-console.log('Seed data loaded successfully.');
-console.log(`  - ${partCount} parts loaded from item master (${skipped} duplicates skipped)`);
-console.log(`  - ${locations.length} locations`);
-console.log(`  - ${supplierCount} suppliers (auto-populated from manufacturers)`);
-console.log('');
-console.log('Parts by classification:');
-for (const row of classificationCounts) {
-  console.log(`  ${row.classification}: ${row.count}`);
-}
-
-closeDb();
+await pool.end();

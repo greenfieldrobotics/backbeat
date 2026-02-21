@@ -1,27 +1,27 @@
 import { Router } from 'express';
-import { getDb } from '../db/connection.js';
+import { query } from '../db/connection.js';
 
 const router = Router();
 
 // GET /api/suppliers
-router.get('/', (req, res) => {
-  const db = getDb();
-  const suppliers = db.prepare('SELECT * FROM suppliers ORDER BY name').all();
-  res.json(suppliers);
+router.get('/', async (req, res) => {
+  const { rows } = await query('SELECT * FROM suppliers ORDER BY name');
+  res.json(rows);
 });
 
 // POST /api/suppliers
-router.post('/', (req, res) => {
-  const db = getDb();
+router.post('/', async (req, res) => {
   const { name } = req.body;
   if (!name) return res.status(400).json({ error: 'name is required' });
 
   try {
-    const result = db.prepare('INSERT INTO suppliers (name) VALUES (?)').run(name);
-    const supplier = db.prepare('SELECT * FROM suppliers WHERE id = ?').get(result.lastInsertRowid);
-    res.status(201).json(supplier);
+    const { rows } = await query(
+      'INSERT INTO suppliers (name) VALUES ($1) RETURNING *',
+      [name]
+    );
+    res.status(201).json(rows[0]);
   } catch (err) {
-    if (err.message.includes('UNIQUE constraint')) {
+    if (err.code === '23505') {
       return res.status(409).json({ error: 'Supplier name already exists' });
     }
     throw err;

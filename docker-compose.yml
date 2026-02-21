@@ -1,0 +1,40 @@
+services:
+  backbeat:
+    build: .
+    ports:
+      - "5173:5173"   # Vite dev server
+      - "3001:3001"   # Express API
+    volumes:
+      - .:/app                                   # Source code (read/write, persists on host)
+      - server_modules:/app/server/node_modules  # Isolated from host for performance
+      - client_modules:/app/client/node_modules  # Isolated from host for performance
+    env_file: .env
+    environment:
+      - DATABASE_URL=postgres://backbeat:backbeat@postgres:5432/backbeat
+    stdin_open: true
+    tty: true
+    working_dir: /app
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: backbeat
+      POSTGRES_PASSWORD: backbeat
+      POSTGRES_DB: backbeat
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U backbeat"]
+      interval: 2s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  server_modules:
+  client_modules:
+  pgdata:

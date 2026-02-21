@@ -1,21 +1,12 @@
 import express from 'express';
 import cors from 'cors';
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import pool, { closePool } from './db/connection.js';
+import { initializeDatabase } from './db/schema.js';
 import partsRouter from './routes/parts.js';
 import locationsRouter from './routes/locations.js';
 import suppliersRouter from './routes/suppliers.js';
 import purchaseOrdersRouter from './routes/purchaseOrders.js';
 import inventoryRouter from './routes/inventory.js';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const dataDir = path.join(__dirname, '..', 'data');
-
-// Ensure data directory exists
-if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir, { recursive: true });
-}
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -30,13 +21,34 @@ app.use('/api/suppliers', suppliersRouter);
 app.use('/api/purchase-orders', purchaseOrdersRouter);
 app.use('/api/inventory', inventoryRouter);
 
-// Health check
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', module: 'Stash', version: '0.1.0' });
+// Health check — pings the database to confirm connectivity
+app.get('/api/health', async (req, res) => {
+  try {
+    await pool.query('SELECT 1');
+    res.json({ status: 'ok', module: 'Stash', version: '0.1.0' });
+  } catch (err) {
+    res.status(503).json({ status: 'error', message: 'Database unreachable' });
+  }
 });
 
-app.listen(PORT, () => {
-  console.log(`Backbeat Stash API running on http://localhost:${PORT}`);
+async function start() {
+  await initializeDatabase(pool);
+
+  app.listen(PORT, () => {
+    console.log(`Backbeat Stash API running on http://localhost:${PORT}`);
+  });
+}
+
+// Graceful shutdown
+process.on('SIGTERM', async () => {
+  console.log('SIGTERM received — closing database pool');
+  await closePool();
+  process.exit(0);
+});
+
+start().catch((err) => {
+  console.error('Failed to start server:', err);
+  process.exit(1);
 });
 
 export default app;

@@ -1,26 +1,23 @@
 import { Router } from 'express';
-import { getDb } from '../db/connection.js';
+import { query } from '../db/connection.js';
 
 const router = Router();
 
 // GET /api/locations - List all locations
-router.get('/', (req, res) => {
-  const db = getDb();
-  const locations = db.prepare('SELECT * FROM locations ORDER BY name').all();
-  res.json(locations);
+router.get('/', async (req, res) => {
+  const { rows } = await query('SELECT * FROM locations ORDER BY name');
+  res.json(rows);
 });
 
 // GET /api/locations/:id - Get single location
-router.get('/:id', (req, res) => {
-  const db = getDb();
-  const location = db.prepare('SELECT * FROM locations WHERE id = ?').get(req.params.id);
-  if (!location) return res.status(404).json({ error: 'Location not found' });
-  res.json(location);
+router.get('/:id', async (req, res) => {
+  const { rows } = await query('SELECT * FROM locations WHERE id = $1', [req.params.id]);
+  if (rows.length === 0) return res.status(404).json({ error: 'Location not found' });
+  res.json(rows[0]);
 });
 
 // POST /api/locations - Create a location
-router.post('/', (req, res) => {
-  const db = getDb();
+router.post('/', async (req, res) => {
   const { name, type } = req.body;
 
   if (!name || !type) {
@@ -33,11 +30,13 @@ router.post('/', (req, res) => {
   }
 
   try {
-    const result = db.prepare('INSERT INTO locations (name, type) VALUES (?, ?)').run(name, type);
-    const location = db.prepare('SELECT * FROM locations WHERE id = ?').get(result.lastInsertRowid);
-    res.status(201).json(location);
+    const { rows } = await query(
+      'INSERT INTO locations (name, type) VALUES ($1, $2) RETURNING *',
+      [name, type]
+    );
+    res.status(201).json(rows[0]);
   } catch (err) {
-    if (err.message.includes('UNIQUE constraint')) {
+    if (err.code === '23505') {
       return res.status(409).json({ error: 'Location name already exists' });
     }
     throw err;
@@ -45,10 +44,9 @@ router.post('/', (req, res) => {
 });
 
 // PUT /api/locations/:id - Update a location
-router.put('/:id', (req, res) => {
-  const db = getDb();
-  const existing = db.prepare('SELECT * FROM locations WHERE id = ?').get(req.params.id);
-  if (!existing) return res.status(404).json({ error: 'Location not found' });
+router.put('/:id', async (req, res) => {
+  const { rows: existing } = await query('SELECT * FROM locations WHERE id = $1', [req.params.id]);
+  if (existing.length === 0) return res.status(404).json({ error: 'Location not found' });
 
   const { name, type } = req.body;
 
@@ -60,18 +58,17 @@ router.put('/:id', (req, res) => {
   }
 
   try {
-    db.prepare(`
+    const { rows } = await query(`
       UPDATE locations SET
-        name = COALESCE(?, name),
-        type = COALESCE(?, type),
-        updated_at = datetime('now')
-      WHERE id = ?
-    `).run(name || null, type || null, req.params.id);
-
-    const location = db.prepare('SELECT * FROM locations WHERE id = ?').get(req.params.id);
-    res.json(location);
+        name = COALESCE($1, name),
+        type = COALESCE($2, type),
+        updated_at = NOW()
+      WHERE id = $3
+      RETURNING *
+    `, [name || null, type || null, req.params.id]);
+    res.json(rows[0]);
   } catch (err) {
-    if (err.message.includes('UNIQUE constraint')) {
+    if (err.code === '23505') {
       return res.status(409).json({ error: 'Location name already exists' });
     }
     throw err;
@@ -79,17 +76,19 @@ router.put('/:id', (req, res) => {
 });
 
 // DELETE /api/locations/:id - Delete a location
-router.delete('/:id', (req, res) => {
-  const db = getDb();
-  const existing = db.prepare('SELECT * FROM locations WHERE id = ?').get(req.params.id);
-  if (!existing) return res.status(404).json({ error: 'Location not found' });
+router.delete('/:id', async (req, res) => {
+  const { rows: existing } = await query('SELECT * FROM locations WHERE id = $1', [req.params.id]);
+  if (existing.length === 0) return res.status(404).json({ error: 'Location not found' });
 
-  const inv = db.prepare('SELECT SUM(quantity_on_hand) as total FROM inventory WHERE location_id = ?').get(req.params.id);
-  if (inv && inv.total > 0) {
+  const { rows: inv } = await query(
+    'SELECT SUM(quantity_on_hand) as total FROM inventory WHERE location_id = $1',
+    [req.params.id]
+  );
+  if (inv[0] && inv[0].total > 0) {
     return res.status(409).json({ error: 'Cannot delete location with existing inventory' });
   }
 
-  db.prepare('DELETE FROM locations WHERE id = ?').run(req.params.id);
+  await query('DELETE FROM locations WHERE id = $1', [req.params.id]);
   res.status(204).send();
 });
 
