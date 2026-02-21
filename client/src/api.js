@@ -51,6 +51,8 @@ export const api = {
   issueParts: (data) => request('/inventory/issue', { method: 'POST', body: JSON.stringify(data) }),
   moveInventory: (data) => request('/inventory/move', { method: 'POST', body: JSON.stringify(data) }),
   disposeInventory: (data) => request('/inventory/dispose', { method: 'POST', body: JSON.stringify(data) }),
+  returnParts: (data) => request('/inventory/return', { method: 'POST', body: JSON.stringify(data) }),
+  adjustInventory: (data) => request('/inventory/adjust', { method: 'POST', body: JSON.stringify(data) }),
   getTransactions: (params = {}) => {
     const qs = new URLSearchParams(params).toString();
     return request(`/inventory/transactions${qs ? '?' + qs : ''}`);

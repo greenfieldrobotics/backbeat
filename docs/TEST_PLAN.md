@@ -319,6 +319,190 @@ Expected:
 
 ---
 
+## 8a. Return Parts to Inventory (Story 5.4)
+
+> Schema already supports `source_type: 'RETURN'`. These tests cover the API endpoint
+> and UI workflow once built.
+
+### Happy Path
+- Return 5 units of a part to a location at $10.00/unit → verify:
+  - New FIFO layer created with source_type = "RETURN", original_qty = 5, remaining_qty = 5, unit_cost = $10.00
+  - Inventory quantity_on_hand increases by 5
+  - Audit trail transaction logged with type = "RETURN", positive quantity, unit_cost, total_cost
+- Return with reason and original issue reference (e.g., reason: "unused", reference: "repair")
+  → verify reason and reference stored in audit trail
+
+### Validation & Edge Cases
+- **Missing part_id:** → 400
+- **Missing location_id:** → 400
+- **Missing quantity:** → 400
+- **Zero or negative quantity:** → 400
+- **Missing unit_cost:** → 400 (cost is required for returns — it creates a new layer)
+- **Negative unit_cost:** → 400
+- **Non-existent part:** → 404
+- **Non-existent location:** → 404
+- **Optional fields:** Return without reason or original reference → succeeds (both optional
+  but recommended for traceability)
+
+### FIFO Layer Creation
+- Return creates a NEW layer — it never modifies existing layers
+- Returned units are available for future FIFO consumption in the correct chronological position
+  (i.e., the return layer's created_at timestamp places it after all prior layers)
+
+### Scenario 8a-A: Return After Full Issue
+```
+Setup:
+  Receive 10 units @ $5.00  → Layer A
+  Issue all 10 units (Layer A depleted)
+
+Action: Return 3 units @ $5.00
+
+Expected:
+  Layer A: remaining = 0 (unchanged — never modified)
+  New Layer B: source_type = RETURN, original_qty = 3, remaining_qty = 3, unit_cost = $5.00
+  Inventory quantity_on_hand: 3
+  Valuation: 3 × $5.00 = $15.00
+```
+
+### Scenario 8a-B: Return at Different Cost Than Original Issue
+```
+Setup:
+  Receive 10 units @ $5.00, issue 5
+
+Action: Return 2 units @ $3.00 (e.g., depreciated value)
+
+Expected:
+  New RETURN layer: 2 units @ $3.00
+  Inventory: 5 (remaining from original) + 2 (returned) = 7
+  Valuation: (5 × $5.00) + (2 × $3.00) = $31.00
+```
+
+---
+
+## 8b. Adjust Inventory (Story 5.5)
+
+> Schema already supports `source_type: 'ADJUSTMENT'`. These tests cover the API endpoint
+> once built. This is the highest-volume correction mechanism (12% of historical transactions).
+
+### Negative Adjustment (Shortage — Physical Count < System)
+
+#### Happy Path
+- System has 10 units, physical count is 7 → adjust to 7
+  - Verify delta calculated: -3
+  - FIFO layers consumed oldest-first (same logic as Issue/Dispose)
+  - Inventory quantity_on_hand decremented by 3
+  - Audit trail: type = "ADJUSTMENT", quantity = -3, before_qty = 10, after_qty = 7, reason logged
+
+#### Scenario 8b-A: Negative Adjustment Spanning Multiple Layers
+```
+Setup:
+  Receive 5 units @ $10.00  → Layer A
+  Receive 5 units @ $20.00  → Layer B
+  System shows 10 units on hand
+
+Action: Adjust to 3 (physical count = 3, delta = -7)
+
+Expected:
+  Layer A remaining: 0 (consumed 5)
+  Layer B remaining: 3 (consumed 2)
+  Total cost of adjustment: (5 × $10) + (2 × $20) = $90.00
+  Inventory quantity_on_hand: 3
+  Valuation: 3 × $20 = $60.00
+```
+
+#### Scenario 8b-B: Negative Adjustment to Zero
+```
+Setup:
+  Receive 5 units @ $8.00  → Layer A
+
+Action: Adjust to 0 (physical count = 0)
+
+Expected:
+  Layer A remaining: 0
+  Total cost of adjustment: 5 × $8.00 = $40.00
+  Inventory quantity_on_hand: 0
+  No active FIFO layers for this part/location
+```
+
+### Positive Adjustment (Overage — Physical Count > System)
+
+#### Happy Path
+- System has 5 units, physical count is 8 → adjust to 8
+  - Verify delta calculated: +3
+  - New FIFO layer created: source_type = "ADJUSTMENT", original_qty = 3, remaining_qty = 3
+  - Inventory quantity_on_hand incremented by 3
+  - Audit trail: type = "ADJUSTMENT", quantity = +3, before_qty = 5, after_qty = 8, reason logged
+
+#### Scenario 8b-C: Positive Adjustment With Specified Cost
+```
+Setup:
+  Receive 5 units @ $10.00  → Layer A
+  System shows 5 on hand
+
+Action: Adjust to 8, unit_cost = $12.00 (e.g., found documentation of missed receipt)
+
+Expected:
+  Layer A: unchanged (5 remaining @ $10.00)
+  New Layer B: source_type = ADJUSTMENT, original_qty = 3, remaining_qty = 3, unit_cost = $12.00
+  Inventory quantity_on_hand: 8
+  Valuation: (5 × $10) + (3 × $12) = $86.00
+```
+
+#### Scenario 8b-D: Positive Adjustment With No Cost Specified (Use Most Recent Layer)
+```
+Setup:
+  Receive 5 units @ $10.00  → Layer A
+  Receive 3 units @ $15.00  → Layer B
+
+Action: Adjust to 10 (delta = +2), no unit_cost provided
+
+Expected:
+  New ADJUSTMENT layer: 2 units @ $15.00 (most recent layer cost used as fallback)
+  Inventory quantity_on_hand: 10
+  Valuation: (5 × $10) + (3 × $15) + (2 × $15) = $125.00
+```
+
+#### Scenario 8b-E: Positive Adjustment From Zero Inventory
+```
+Setup:
+  No inventory exists for this part/location (no layers, no inventory record)
+
+Action: Adjust to 5, unit_cost = $7.50
+
+Expected:
+  New ADJUSTMENT layer: 5 units @ $7.50
+  Inventory record created: quantity_on_hand = 5
+  Valuation: 5 × $7.50 = $37.50
+```
+
+### Adjustment Where Count Equals System (No-Op)
+- System has 10, physical count is 10 → delta = 0
+- No FIFO layers created or consumed
+- No audit trail record (or an informational record with delta = 0 — design decision)
+- Inventory unchanged
+
+### Validation & Edge Cases
+- **Missing part_id:** → 400
+- **Missing location_id:** → 400
+- **Missing new_quantity (physical count):** → 400
+- **Negative new_quantity:** → 400 (physical count can't be negative)
+- **Non-existent part:** → 404
+- **Non-existent location:** → 404
+- **Missing reason:** → 400 (reason is required per Story 5.5 controls)
+- **Positive adjustment without unit_cost and no existing layers:** → 400 (no cost fallback available)
+
+### Controls
+- Adjustment is admin-only (once auth is implemented, verify non-admin users receive 403)
+- Reason code is required on every adjustment
+- Audit trail includes before_qty, after_qty, delta, cost impact, and reason
+
+### FIFO Immutability
+- Negative adjustments consume layers — they never modify existing layer quantities directly
+- Positive adjustments create new layers — they never increase remaining_qty on existing layers
+- Historical layers are never edited, only new transactions are created
+
+---
+
 ## 9. Valuation Report (Story F3)
 
 ### Happy Path
@@ -371,13 +555,15 @@ Expected:
 ## 11. Audit Trail / Transactions (Story F4)
 
 ### Coverage
-- Every transaction type produces an audit record: RECEIVE, ISSUE, MOVE, DISPOSE
+- Every transaction type produces an audit record: RECEIVE, ISSUE, MOVE, DISPOSE, RETURN, ADJUSTMENT
 - Each record includes: transaction_type, part_id, location_id, quantity, unit_cost,
   total_cost, created_at (auto-timestamped)
 - MOVE transactions include to_location_id
 - ISSUE transactions include target_ref and reason
 - DISPOSE transactions include reason
 - RECEIVE transactions include reference_id (PO id) and reason
+- RETURN transactions include reason and optional original issue reference
+- ADJUSTMENT transactions include before_qty, after_qty (or delta), reason, and cost impact
 
 ### Query Filtering
 - Filter by part_id → only transactions for that part
@@ -455,17 +641,66 @@ Expected:
 6. Audit trail: 3 transactions (RECEIVE, ISSUE, DISPOSE) in correct chronological order
 ```
 
+### Workflow 12E: Issue → Return → Re-Issue (FIFO Ordering of Return Layer)
+```
+1. Receive 10 units @ $5.00 at Warehouse → Layer A
+2. Issue 10 units (Layer A depleted, cost = $50)
+3. Return 4 units @ $5.00 (reason: "unused from repair") → Layer B (source_type: RETURN)
+4. Receive 6 units @ $8.00 via new PO → Layer C (source_type: PO_RECEIPT)
+5. Verify inventory: 10 units (4 returned + 6 new receipt)
+6. Verify 2 active layers: Layer B (4 @ $5.00), Layer C (6 @ $8.00)
+7. Issue 5 units
+8. Verify FIFO order: Layer B consumed first (4 @ $5.00), then 1 from Layer C (1 @ $8.00)
+9. Total cost of second issue: (4 × $5) + (1 × $8) = $28.00
+10. Remaining: 5 units in Layer C @ $8.00 = $40.00
+11. Audit trail: 4 transactions (RECEIVE, ISSUE, RETURN, RECEIVE, ISSUE) in chronological order
+```
+
+### Workflow 12F: Receive → Partial Issue → Negative Adjustment → Valuation
+```
+1. Receive 10 units @ $5.00 → Layer A
+2. Receive 10 units @ $8.00 → Layer B
+3. Issue 3 units (consumes 3 from Layer A, cost = $15)
+4. Verify Layer A: 7 remaining, Layer B: 10 remaining
+5. Physical count finds 14 units (system shows 17) → Adjust to 14 (delta = -3)
+6. Verify adjustment consumes FIFO oldest-first: Layer A 7→4 (consumed 3)
+7. Adjustment cost: 3 × $5.00 = $15.00
+8. Final state: Layer A = 4 @ $5.00, Layer B = 10 @ $8.00
+9. Valuation: (4 × $5) + (10 × $8) = $100.00
+10. Inventory quantity_on_hand: 14
+11. Audit trail: 4 transactions (2 RECEIVE, 1 ISSUE, 1 ADJUSTMENT)
+```
+
+### Workflow 12G: Positive Adjustment → Move → Issue (Adjustment Layer Participates in FIFO)
+```
+1. Receive 5 units @ $10.00 at Location A → Layer A
+2. Adjust inventory at Location A to 8 (delta = +3, unit_cost = $12.00) → Layer B (ADJUSTMENT)
+3. Verify inventory: 8 units, 2 layers (5 @ $10, 3 @ $12)
+4. Move 6 units from Location A to Location B
+5. Verify move consumes FIFO: 5 from Layer A + 1 from Layer B
+6. Location A: 2 units (Layer B remainder: 2 @ $12.00)
+7. Location B: 6 units (new layer 5 @ $10, new layer 1 @ $12)
+8. Issue 4 units from Location B
+9. Verify FIFO at Location B: consume 4 from the 5-unit layer @ $10 → cost = $40
+10. Location B remaining: 1 @ $10 + 1 @ $12 = $22.00
+11. Grand total valuation: Location A ($24) + Location B ($22) = $46.00
+```
+
 ---
 
 ## 13. Inventory Summary Consistency
 
 > The `inventory` table is denormalized. These tests verify it stays in sync with FIFO layers.
 
-- After any receive, issue, move, or dispose: `inventory.quantity_on_hand` must equal
-  `SUM(fifo_layers.remaining_qty)` for the same part/location
+- After any receive, issue, move, dispose, return, or adjustment: `inventory.quantity_on_hand`
+  must equal `SUM(fifo_layers.remaining_qty)` for the same part/location
 - Test this invariant after each operation in the cross-feature workflows above
 - **Specific test:** After Workflow 12C, for every part/location combination, query both
   the inventory table and sum the FIFO layers — they must match exactly
+- **Specific test:** After Workflow 12F (which combines receive, issue, and negative adjustment),
+  verify the invariant holds
+- **Specific test:** After Workflow 12G (which combines receive, positive adjustment, move,
+  and issue), verify the invariant holds at both locations
 
 ---
 
@@ -482,6 +717,10 @@ Expected:
   partial FIFO consumption
 - **Move with insufficient inventory:** Should fail atomically — source inventory unchanged,
   no layers created at destination
+- **Negative adjustment larger than total inventory:** Adjust to -5 when system has 3 →
+  should fail atomically, no layers consumed, inventory unchanged
+- **Positive adjustment with invalid cost data:** If cost fallback logic fails (no cost
+  provided, no existing layers), the entire adjustment should roll back cleanly
 
 ---
 

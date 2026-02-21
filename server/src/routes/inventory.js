@@ -383,6 +383,268 @@ router.post('/issue', async (req, res) => {
   }
 });
 
+// POST /api/inventory/return - Return parts to inventory (Story 5.4)
+router.post('/return', async (req, res) => {
+  const { part_id, location_id, quantity, unit_cost, reason, reference } = req.body;
+
+  if (!part_id || !location_id || !quantity || quantity <= 0) {
+    return res.status(400).json({ error: 'part_id, location_id, and positive quantity are required' });
+  }
+  if (unit_cost === undefined || unit_cost === null || unit_cost < 0) {
+    return res.status(400).json({ error: 'unit_cost is required and must be >= 0' });
+  }
+
+  const { rows: partRows } = await query('SELECT * FROM parts WHERE id = $1', [part_id]);
+  if (partRows.length === 0) return res.status(404).json({ error: 'Part not found' });
+  const part = partRows[0];
+
+  const { rows: locRows } = await query('SELECT * FROM locations WHERE id = $1', [location_id]);
+  if (locRows.length === 0) return res.status(404).json({ error: 'Location not found' });
+  const location = locRows[0];
+
+  const client = await getClient();
+  try {
+    await client.query('BEGIN');
+
+    // Create new FIFO layer for the return
+    const { rows: [fifoLayer] } = await client.query(`
+      INSERT INTO fifo_layers (part_id, location_id, source_type, source_ref, original_qty, remaining_qty, unit_cost)
+      VALUES ($1, $2, 'RETURN', $3, $4, $5, $6)
+      RETURNING *
+    `, [part_id, location_id, reference || null, quantity, quantity, unit_cost]);
+
+    // Upsert inventory
+    await client.query(`
+      INSERT INTO inventory (part_id, location_id, quantity_on_hand)
+      VALUES ($1, $2, $3)
+      ON CONFLICT(part_id, location_id) DO UPDATE SET quantity_on_hand = inventory.quantity_on_hand + $4
+    `, [part_id, location_id, quantity, quantity]);
+
+    // Audit trail
+    const totalCost = quantity * unit_cost;
+    await client.query(`
+      INSERT INTO inventory_transactions (transaction_type, part_id, location_id, quantity, unit_cost, total_cost, reference_type, target_ref, reason)
+      VALUES ('RETURN', $1, $2, $3, $4, $5, 'MANUAL', $6, $7)
+    `, [part_id, location_id, quantity, unit_cost, totalCost, reference || null, reason || null]);
+
+    await client.query('COMMIT');
+
+    res.json({
+      part_number: part.part_number,
+      location: location.name,
+      quantity_returned: quantity,
+      unit_cost: Number(unit_cost),
+      total_cost: totalCost,
+      reason: reason || null,
+      fifo_layer_created: {
+        id: fifoLayer.id,
+        source_type: fifoLayer.source_type,
+        original_qty: fifoLayer.original_qty,
+        remaining_qty: fifoLayer.remaining_qty,
+        unit_cost: Number(fifoLayer.unit_cost),
+      },
+    });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    res.status(400).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// POST /api/inventory/adjust - Adjust inventory count (Story 5.5)
+router.post('/adjust', async (req, res) => {
+  const { part_id, location_id, new_quantity, unit_cost, reason } = req.body;
+
+  if (!part_id || !location_id || new_quantity === undefined || new_quantity === null || new_quantity < 0) {
+    return res.status(400).json({ error: 'part_id, location_id, and new_quantity (>= 0) are required' });
+  }
+  if (!reason) {
+    return res.status(400).json({ error: 'reason is required for inventory adjustments' });
+  }
+
+  const { rows: partRows } = await query('SELECT * FROM parts WHERE id = $1', [part_id]);
+  if (partRows.length === 0) return res.status(404).json({ error: 'Part not found' });
+  const part = partRows[0];
+
+  const { rows: locRows } = await query('SELECT * FROM locations WHERE id = $1', [location_id]);
+  if (locRows.length === 0) return res.status(404).json({ error: 'Location not found' });
+  const location = locRows[0];
+
+  // Get current quantity
+  const { rows: invRows } = await query(
+    'SELECT * FROM inventory WHERE part_id = $1 AND location_id = $2',
+    [part_id, location_id]
+  );
+  const currentQty = invRows.length > 0 ? invRows[0].quantity_on_hand : 0;
+  const delta = new_quantity - currentQty;
+
+  // No change needed
+  if (delta === 0) {
+    return res.json({
+      part_number: part.part_number,
+      location: location.name,
+      before_quantity: currentQty,
+      after_quantity: new_quantity,
+      delta: 0,
+      message: 'No adjustment needed',
+    });
+  }
+
+  const client = await getClient();
+  try {
+    await client.query('BEGIN');
+
+    let totalCost = 0;
+    let adjustUnitCost = null;
+    let fifoLayersConsumed = null;
+    let fifoLayerCreated = null;
+
+    if (delta < 0) {
+      // Shortage — consume FIFO layers oldest-first
+      const absDelta = Math.abs(delta);
+
+      const { rows: invCheck } = await client.query(
+        'SELECT * FROM inventory WHERE part_id = $1 AND location_id = $2',
+        [part_id, location_id]
+      );
+      if (!invCheck[0] || invCheck[0].quantity_on_hand < absDelta) {
+        throw new Error(`Insufficient inventory. Available: ${invCheck[0] ? invCheck[0].quantity_on_hand : 0}, Adjustment requires: ${absDelta}`);
+      }
+
+      const { rows: layers } = await client.query(`
+        SELECT * FROM fifo_layers
+        WHERE part_id = $1 AND location_id = $2 AND remaining_qty > 0
+        ORDER BY created_at ASC, id ASC
+      `, [part_id, location_id]);
+
+      let remainingToConsume = absDelta;
+      const layersConsumed = [];
+
+      for (const layer of layers) {
+        if (remainingToConsume <= 0) break;
+
+        const consumeQty = Math.min(remainingToConsume, layer.remaining_qty);
+        const consumeCost = consumeQty * layer.unit_cost;
+
+        await client.query(
+          'UPDATE fifo_layers SET remaining_qty = remaining_qty - $1 WHERE id = $2',
+          [consumeQty, layer.id]
+        );
+
+        layersConsumed.push({
+          layer_id: layer.id,
+          quantity_consumed: consumeQty,
+          unit_cost: Number(layer.unit_cost),
+          cost: consumeCost,
+        });
+
+        totalCost += consumeCost;
+        remainingToConsume -= consumeQty;
+      }
+
+      // Update inventory
+      await client.query(
+        'UPDATE inventory SET quantity_on_hand = quantity_on_hand - $1 WHERE part_id = $2 AND location_id = $3',
+        [absDelta, part_id, location_id]
+      );
+
+      adjustUnitCost = totalCost / absDelta;
+      fifoLayersConsumed = layersConsumed;
+
+      // Audit trail
+      await client.query(`
+        INSERT INTO inventory_transactions (transaction_type, part_id, location_id, quantity, unit_cost, total_cost, reference_type, reason, fifo_layers_consumed)
+        VALUES ('ADJUSTMENT', $1, $2, $3, $4, $5, 'MANUAL', $6, $7)
+      `, [part_id, location_id, delta, adjustUnitCost, -totalCost, reason, JSON.stringify(layersConsumed)]);
+
+    } else {
+      // Overage — create new FIFO layer
+      // Determine cost: use provided unit_cost, else most recent layer's unit_cost
+      let costToUse = unit_cost;
+      if (costToUse === undefined || costToUse === null) {
+        const { rows: recentLayers } = await client.query(`
+          SELECT unit_cost FROM fifo_layers
+          WHERE part_id = $1 AND location_id = $2
+          ORDER BY created_at DESC, id DESC
+          LIMIT 1
+        `, [part_id, location_id]);
+
+        if (recentLayers.length > 0) {
+          costToUse = Number(recentLayers[0].unit_cost);
+        } else {
+          // Check any layer for this part at any location
+          const { rows: anyLayers } = await client.query(`
+            SELECT unit_cost FROM fifo_layers
+            WHERE part_id = $1
+            ORDER BY created_at DESC, id DESC
+            LIMIT 1
+          `, [part_id]);
+
+          if (anyLayers.length > 0) {
+            costToUse = Number(anyLayers[0].unit_cost);
+          } else {
+            throw new Error('unit_cost is required when no existing FIFO layers exist to derive cost from');
+          }
+        }
+      }
+
+      totalCost = delta * costToUse;
+      adjustUnitCost = costToUse;
+
+      // Create FIFO layer
+      const { rows: [fifoLayer] } = await client.query(`
+        INSERT INTO fifo_layers (part_id, location_id, source_type, source_ref, original_qty, remaining_qty, unit_cost)
+        VALUES ($1, $2, 'ADJUSTMENT', $3, $4, $5, $6)
+        RETURNING *
+      `, [part_id, location_id, reason, delta, delta, costToUse]);
+
+      fifoLayerCreated = {
+        id: fifoLayer.id,
+        source_type: fifoLayer.source_type,
+        original_qty: fifoLayer.original_qty,
+        remaining_qty: fifoLayer.remaining_qty,
+        unit_cost: Number(fifoLayer.unit_cost),
+      };
+
+      // Upsert inventory
+      await client.query(`
+        INSERT INTO inventory (part_id, location_id, quantity_on_hand)
+        VALUES ($1, $2, $3)
+        ON CONFLICT(part_id, location_id) DO UPDATE SET quantity_on_hand = inventory.quantity_on_hand + $4
+      `, [part_id, location_id, delta, delta]);
+
+      // Audit trail
+      await client.query(`
+        INSERT INTO inventory_transactions (transaction_type, part_id, location_id, quantity, unit_cost, total_cost, reference_type, reason)
+        VALUES ('ADJUSTMENT', $1, $2, $3, $4, $5, 'MANUAL', $6)
+      `, [part_id, location_id, delta, costToUse, totalCost, reason]);
+    }
+
+    await client.query('COMMIT');
+
+    const result = {
+      part_number: part.part_number,
+      location: location.name,
+      before_quantity: currentQty,
+      after_quantity: new_quantity,
+      delta,
+      unit_cost: adjustUnitCost,
+      total_cost: totalCost,
+      reason,
+    };
+    if (fifoLayersConsumed) result.fifo_layers_consumed = fifoLayersConsumed;
+    if (fifoLayerCreated) result.fifo_layer_created = fifoLayerCreated;
+
+    res.json(result);
+  } catch (err) {
+    await client.query('ROLLBACK');
+    res.status(400).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
 // GET /api/inventory/transactions - Audit trail
 router.get('/transactions', async (req, res) => {
   const { part_id, location_id, limit: queryLimit } = req.query;

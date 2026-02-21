@@ -7,6 +7,8 @@ import InventoryPage from './pages/InventoryPage';
 import IssuePage from './pages/IssuePage';
 import MovePage from './pages/MovePage';
 import DisposePage from './pages/DisposePage';
+import ReturnPage from './pages/ReturnPage';
+import AdjustPage from './pages/AdjustPage';
 import ValuationPage from './pages/ValuationPage';
 import TransactionsPage from './pages/TransactionsPage';
 import './App.css';
@@ -28,6 +30,8 @@ function App() {
             <li><NavLink to="/issue">Issue Parts</NavLink></li>
             <li><NavLink to="/move">Move Inventory</NavLink></li>
             <li><NavLink to="/dispose">Dispose</NavLink></li>
+            <li><NavLink to="/return">Return Parts</NavLink></li>
+            <li><NavLink to="/adjust">Adjust Inventory</NavLink></li>
             <li><NavLink to="/valuation">FIFO Valuation</NavLink></li>
             <li><NavLink to="/transactions">Audit Trail</NavLink></li>
           </ul>
@@ -42,6 +46,8 @@ function App() {
             <Route path="/issue" element={<IssuePage />} />
             <Route path="/move" element={<MovePage />} />
             <Route path="/dispose" element={<DisposePage />} />
+            <Route path="/return" element={<ReturnPage />} />
+            <Route path="/adjust" element={<AdjustPage />} />
             <Route path="/valuation" element={<ValuationPage />} />
             <Route path="/transactions" element={<TransactionsPage />} />
           </Routes>

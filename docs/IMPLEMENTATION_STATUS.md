@@ -9,14 +9,14 @@ Last updated: 2026-02-21
 - **3.1** Move Inventory — between locations, FIFO layers transfer
 - **5.1** Issue Parts — FIFO consumption with reason/target tracking
 - **5.2** Dispose Inventory — FIFO consumption with reason
+- **5.4** Return Parts — return to inventory with new FIFO layer, audit trail
+- **5.5** Adjust Inventory — count-based adjustment with FIFO consumption/creation
 - **F1** FIFO layers created on receipt
 - **F2** FIFO consumption (oldest first, partial layers)
 - **F3** Valuation Report with CSV export
 - **F4** Audit trail for all transactions
 
 ## Partially Implemented
-- **5.4** Return Parts — schema supports RETURN source_type; no API endpoint or UI
-- **5.5** Adjust Inventory — schema supports ADJUSTMENT source_type; no API endpoint or UI
 - **7.2** Admin Dashboard — basic stats only; missing CM vs warehouse, low-stock alerts, open PO summary
 
 ## Not Implemented

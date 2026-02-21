@@ -81,3 +81,18 @@ export async function receiveInventoryViaAPI({ partId, locationId, supplierId, q
 
   return po;
 }
+
+/**
+ * Return parts to inventory via the API.
+ * Returns the response body.
+ */
+export async function returnPartsViaAPI({ partId, locationId, qty, unitCost, reason, reference }) {
+  return post('/inventory/return', {
+    part_id: partId,
+    location_id: locationId,
+    quantity: qty,
+    unit_cost: unitCost,
+    reason: reason || undefined,
+    reference: reference || undefined,
+  });
+}
