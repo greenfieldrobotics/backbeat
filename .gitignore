@@ -6,3 +6,5 @@ server/data/
 .DS_Store
 .claude/
 Barcloud-History.csv
+test-results/
+playwright-report/

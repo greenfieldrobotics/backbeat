@@ -8,6 +8,11 @@
     "dev:server": "cd server && npm run dev",
     "dev:client": "cd client && npm run dev",
     "seed": "cd server && npm run seed",
-    "start": "cd server && npm start"
+    "start": "cd server && npm start",
+    "test:e2e": "npx playwright test; cd server && npm run seed"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.2",
+    "pg": "^8.18.0"
   }
 }
