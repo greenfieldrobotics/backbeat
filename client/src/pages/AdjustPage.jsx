@@ -108,7 +108,7 @@ export default function AdjustPage() {
             {delta !== null && (
               <div className="form-group">
                 <label>
-                  Delta: <strong style={{ color: delta > 0 ? 'green' : delta < 0 ? 'red' : 'inherit' }}>
+                  Delta: <strong style={{ color: delta > 0 ? '#009D9A' : 'inherit' }}>
                     {delta > 0 ? '+' : ''}{delta}
                   </strong>
                   {delta > 0 && ' (overage — new FIFO layer will be created)'}
