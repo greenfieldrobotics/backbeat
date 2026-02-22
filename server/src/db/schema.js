@@ -120,5 +120,14 @@ export async function initializeDatabase(pool) {
     CREATE INDEX IF NOT EXISTS idx_transactions_created ON inventory_transactions(created_at);
   `);
 
+  // Seed admin user if users table is empty
+  const { rows } = await pool.query('SELECT COUNT(*) FROM users');
+  if (parseInt(rows[0].count) === 0) {
+    await pool.query(
+      `INSERT INTO users (email, name, role) VALUES ('nandan.kalle@greenfieldrobotics.com', 'Nandan Kalle', 'admin')`
+    );
+    console.log('Seeded admin user: nandan.kalle@greenfieldrobotics.com');
+  }
+
   return pool;
 }
