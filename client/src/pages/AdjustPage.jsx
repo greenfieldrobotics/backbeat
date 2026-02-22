@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { api } from '../api';
+import PartSearch from '../components/PartSearch';
 
 const ADJUST_REASONS = ['Physical count', 'Cycle count correction', 'Receiving correction', 'Other'];
 
@@ -71,12 +72,11 @@ export default function AdjustPage() {
       <div className="card">
         <div className="form-group">
           <label>Part</label>
-          <select value={form.part_id} onChange={e => setForm({ ...form, part_id: e.target.value, location_id: '', new_quantity: '', unit_cost: '' })}>
-            <option value="">Select part...</option>
-            {parts.map(p => (
-              <option key={p.id} value={p.id}>{p.part_number} - {p.description}</option>
-            ))}
-          </select>
+          <PartSearch
+            parts={parts}
+            value={form.part_id}
+            onSelect={p => setForm({ ...form, part_id: String(p.id || ''), location_id: '', new_quantity: '', unit_cost: '' })}
+          />
         </div>
 
         <div className="form-group">

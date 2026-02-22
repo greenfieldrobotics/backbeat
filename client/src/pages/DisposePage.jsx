@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { api } from '../api';
+import PartSearch from '../components/PartSearch';
 
 const DISPOSE_REASONS = ['Damaged', 'Obsolete', 'Expired', 'Defective', 'Other'];
 
@@ -64,12 +65,11 @@ export default function DisposePage() {
       <div className="card">
         <div className="form-group">
           <label>Part</label>
-          <select value={form.part_id} onChange={e => setForm({ ...form, part_id: e.target.value, location_id: '', quantity: '', reason: '' })}>
-            <option value="">Select part...</option>
-            {partsWithStock.map(p => (
-              <option key={p.id} value={p.id}>{p.part_number} - {p.description}</option>
-            ))}
-          </select>
+          <PartSearch
+            parts={partsWithStock}
+            value={form.part_id}
+            onSelect={p => setForm({ ...form, part_id: String(p.id || ''), location_id: '', quantity: '', reason: '' })}
+          />
         </div>
 
         {form.part_id && (
