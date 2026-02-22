@@ -2,28 +2,86 @@
 
 ## Prerequisites
 
-- **Node.js** (v18+) — `node --version` to check
-- **npm** — comes with Node.js
+- **Docker Desktop** — Download from https://www.docker.com/products/docker-desktop/
+- **Claude Max subscription** — Sign up at https://claude.ai (for AI-assisted development)
+- **GitHub account** — With access to the greenfieldrobotics/backbeat repo
 
-## Quick Start
+---
+
+## First-Time Setup (do once)
+
+### 1. Clone the repo
 
 ```bash
-# 1. Install dependencies
-cd server && npm install && cd ..
-cd client && npm install && cd ..
-
-# 2. Seed the database with sample data
-cd server && npm run seed && cd ..
-
-# 3. Start both servers (from project root)
-npm run dev
+git clone https://github.com/greenfieldrobotics/backbeat.git
+cd backbeat
 ```
 
-This starts:
-- **API server** at http://localhost:3001
-- **React app** at http://localhost:5173
+### 2. Create your `.env` file
 
-Open http://localhost:5173 in your browser.
+```bash
+cp .env.example .env
+```
+
+Edit `.env` and fill in:
+
+```
+GITHUB_TOKEN=ghp_your-token-here
+GIT_USER_NAME=Your Name
+GIT_USER_EMAIL=your-email@example.com
+```
+
+To get a GitHub token:
+1. Go to https://github.com/settings/tokens
+2. Click **Generate new token (classic)**
+3. Name it "Backbeat sandbox", select the `repo` scope
+4. Copy the token and paste it into `.env`
+
+### 3. Build and start
+
+```bash
+docker compose build
+docker compose up
+```
+
+The first time takes a few minutes. The container will automatically:
+- Install all dependencies
+- Seed the database with sample data
+- Start the dev servers
+
+### 4. Open the app
+
+Go to http://localhost:5173 in your browser.
+
+### 5. Start Claude Code (in a second terminal)
+
+```bash
+docker compose exec backbeat bash
+claude
+```
+
+Log in with your Claude Max account when prompted.
+
+---
+
+## Every Time You Work
+
+```bash
+docker compose up
+```
+
+That's it. Open http://localhost:5173. Everything starts automatically.
+
+To use Claude Code, open a second terminal:
+
+```bash
+docker compose exec backbeat bash
+claude
+```
+
+When you're done, press `Ctrl+C` in the first terminal to stop the container.
+
+---
 
 ## What You Can Do
 
@@ -53,25 +111,31 @@ Open http://localhost:5173 in your browser.
 - Export to CSV
 
 ### Audit Trail
-- Every transaction (receive, issue) is logged with timestamp and cost
+- Every transaction (receive, issue, move, dispose, adjust) is logged with timestamp and cost
+
+---
 
 ## Resetting the Database
 
+Inside the container:
+
 ```bash
-cd server && npm run seed
+cd /app/server && node src/db/seed.js
 ```
 
 This wipes and reloads all sample data.
+
+---
 
 ## Architecture
 
 ```
 backbeat/
-  server/           Express API + SQLite
+  server/           Express API + PostgreSQL
     src/
       db/            Schema, connection, seed data
       routes/        API endpoints (parts, locations, POs, inventory)
-    data/            SQLite database file (gitignored)
+      auth/          Google OAuth + session auth
   client/           React (Vite)
     src/
       pages/         One page per feature
