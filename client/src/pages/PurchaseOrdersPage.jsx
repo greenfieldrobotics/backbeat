@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
+import PartSearch from '../components/PartSearch';
 
 export default function PurchaseOrdersPage() {
   const [pos, setPos] = useState([]);
@@ -107,10 +108,11 @@ export default function PurchaseOrdersPage() {
               <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'end' }}>
                 <div className="form-group" style={{ flex: 2, marginBottom: 0 }}>
                   {i === 0 && <label>Part</label>}
-                  <select value={li.part_id} onChange={e => updateLine(i, 'part_id', e.target.value)}>
-                    <option value="">Select part...</option>
-                    {parts.map(p => <option key={p.id} value={p.id}>{p.part_number} - {p.description}</option>)}
-                  </select>
+                  <PartSearch
+                    parts={parts}
+                    value={li.part_id}
+                    onSelect={p => updateLine(i, 'part_id', String(p.id || ''))}
+                  />
                 </div>
                 <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
                   {i === 0 && <label>Qty</label>}
