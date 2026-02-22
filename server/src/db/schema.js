@@ -100,6 +100,18 @@ export async function initializeDatabase(pool) {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
 
+    -- Users (allowlist for authentication)
+    CREATE TABLE IF NOT EXISTS users (
+      id SERIAL PRIMARY KEY,
+      google_id TEXT UNIQUE,
+      email TEXT NOT NULL UNIQUE,
+      name TEXT NOT NULL DEFAULT '',
+      picture TEXT,
+      role TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('user', 'admin')),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      last_login_at TIMESTAMPTZ
+    );
+
     -- Indexes for common queries
     CREATE INDEX IF NOT EXISTS idx_fifo_layers_part_location ON fifo_layers(part_id, location_id, remaining_qty);
     CREATE INDEX IF NOT EXISTS idx_inventory_part_location ON inventory(part_id, location_id);

@@ -34,7 +34,8 @@ export default async function globalSetup() {
         purchase_orders,
         suppliers,
         parts,
-        locations
+        locations,
+        users
       RESTART IDENTITY CASCADE
     `);
   } finally {

@@ -1,6 +1,10 @@
 import express from 'express';
 import cors from 'cors';
+import session from 'express-session';
 import pool from './db/connection.js';
+import passport from './auth/passport.js';
+import { requireAuth } from './auth/authMiddleware.js';
+import authRoutes from './auth/authRoutes.js';
 import partsRouter from './routes/parts.js';
 import locationsRouter from './routes/locations.js';
 import suppliersRouter from './routes/suppliers.js';
@@ -9,17 +13,33 @@ import inventoryRouter from './routes/inventory.js';
 
 const app = express();
 
-app.use(cors());
+// CORS — allow credentials (cookies) from the frontend origin
+app.use(cors({
+  origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+  credentials: true,
+}));
+
 app.use(express.json());
 
-// API routes
-app.use('/api/parts', partsRouter);
-app.use('/api/locations', locationsRouter);
-app.use('/api/suppliers', suppliersRouter);
-app.use('/api/purchase-orders', purchaseOrdersRouter);
-app.use('/api/inventory', inventoryRouter);
+// Session
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'backbeat-dev-secret',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+  },
+}));
 
-// Health check — pings the database to confirm connectivity
+// Passport
+app.use(passport.initialize());
+app.use(passport.session());
+
+// Auth routes (unprotected — must be accessible to log in)
+app.use('/auth', authRoutes);
+
+// Health check (unprotected — for monitoring)
 app.get('/api/health', async (req, res) => {
   try {
     await pool.query('SELECT 1');
@@ -28,5 +48,15 @@ app.get('/api/health', async (req, res) => {
     res.status(503).json({ status: 'error', message: 'Database unreachable' });
   }
 });
+
+// Protect all /api routes
+app.use('/api', requireAuth);
+
+// API routes
+app.use('/api/parts', partsRouter);
+app.use('/api/locations', locationsRouter);
+app.use('/api/suppliers', suppliersRouter);
+app.use('/api/purchase-orders', purchaseOrdersRouter);
+app.use('/api/inventory', inventoryRouter);
 
 export default app;

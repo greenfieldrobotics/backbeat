@@ -14,7 +14,8 @@ export async function truncateAllTables() {
       purchase_orders,
       suppliers,
       locations,
-      parts
+      parts,
+      users
     RESTART IDENTITY CASCADE
   `);
 }

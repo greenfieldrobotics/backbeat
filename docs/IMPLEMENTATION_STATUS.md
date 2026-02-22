@@ -1,5 +1,5 @@
 # Backbeat / Stash — Implementation Status
-Last updated: 2026-02-21
+Last updated: 2026-02-22
 
 ## Implemented
 - **1.1** Part Catalog — full CRUD, search/filter, all fields
@@ -18,6 +18,7 @@ Last updated: 2026-02-21
 
 ## Partially Implemented
 - **7.2** Admin Dashboard — basic stats only; missing CM vs warehouse, low-stock alerts, open PO summary
+- **8.3** User Management & Auth — Google OAuth login, session-based auth, email allowlist; admin UI and role enforcement deferred
 
 ## Not Implemented
 - **1.2** Part Variants
@@ -29,4 +30,3 @@ Last updated: 2026-02-21
 - **7.1** Mobile Barcode Interface
 - **8.1** Part Images
 - **8.2** Barcode Label Printing
-- **8.3** User Management & Auth

@@ -3,6 +3,7 @@ const BASE = '/api';
 async function request(path, options = {}) {
   const res = await fetch(`${BASE}${path}`, {
     headers: { 'Content-Type': 'application/json', ...options.headers },
+    credentials: 'include',
     ...options,
   });
 
@@ -15,6 +16,21 @@ async function request(path, options = {}) {
 
   if (res.status === 204) return null;
   return res.json();
+}
+
+// Auth helpers (use /auth prefix, not /api)
+export async function getMe() {
+  try {
+    const res = await fetch('/auth/me', { credentials: 'include' });
+    if (!res.ok) return null;
+    return res.json();
+  } catch {
+    return null;
+  }
+}
+
+export async function logout() {
+  await fetch('/auth/logout', { method: 'POST', credentials: 'include' });
 }
 
 export const api = {

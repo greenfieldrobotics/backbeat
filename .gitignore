@@ -6,5 +6,6 @@ server/data/
 .DS_Store
 .claude/
 Barcloud-History.csv
+client_secret*.json
 test-results/
 playwright-report/

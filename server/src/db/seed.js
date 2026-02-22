@@ -33,6 +33,7 @@ try {
     DROP TABLE IF EXISTS suppliers CASCADE;
     DROP TABLE IF EXISTS parts CASCADE;
     DROP TABLE IF EXISTS locations CASCADE;
+    DROP TABLE IF EXISTS users CASCADE;
   `);
 
   await client.query('COMMIT');
