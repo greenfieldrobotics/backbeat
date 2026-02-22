@@ -13,6 +13,7 @@ import ReturnPage from './pages/ReturnPage';
 import AdjustPage from './pages/AdjustPage';
 import ValuationPage from './pages/ValuationPage';
 import TransactionsPage from './pages/TransactionsPage';
+import UsersPage from './pages/UsersPage';
 import './App.css';
 
 function AppShell() {
@@ -49,6 +50,7 @@ function AppShell() {
           <li><NavLink to="/adjust">Adjust Inventory</NavLink></li>
           <li><NavLink to="/valuation">FIFO Valuation</NavLink></li>
           <li><NavLink to="/transactions">Audit Trail</NavLink></li>
+          {user.role === 'admin' && <li><NavLink to="/users">User Management</NavLink></li>}
         </ul>
         <div className="sidebar-user">
           <div className="sidebar-user-name">{user.name || user.email}</div>
@@ -69,6 +71,7 @@ function AppShell() {
           <Route path="/adjust" element={<AdjustPage />} />
           <Route path="/valuation" element={<ValuationPage />} />
           <Route path="/transactions" element={<TransactionsPage />} />
+          <Route path="/users" element={<UsersPage />} />
         </Routes>
       </main>
     </div>

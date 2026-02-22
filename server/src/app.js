@@ -12,6 +12,8 @@ import locationsRouter from './routes/locations.js';
 import suppliersRouter from './routes/suppliers.js';
 import purchaseOrdersRouter from './routes/purchaseOrders.js';
 import inventoryRouter from './routes/inventory.js';
+import dashboardRouter from './routes/dashboard.js';
+import usersRouter from './routes/users.js';
 
 const app = express();
 
@@ -63,6 +65,8 @@ app.use('/api/locations', locationsRouter);
 app.use('/api/suppliers', suppliersRouter);
 app.use('/api/purchase-orders', purchaseOrdersRouter);
 app.use('/api/inventory', inventoryRouter);
+app.use('/api/dashboard', dashboardRouter);
+app.use('/api/users', usersRouter);
 
 // Production: serve built React client
 const __dirname = path.dirname(fileURLToPath(import.meta.url));

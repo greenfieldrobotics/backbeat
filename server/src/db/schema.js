@@ -107,7 +107,7 @@ export async function initializeDatabase(pool) {
       email TEXT NOT NULL UNIQUE,
       name TEXT NOT NULL DEFAULT '',
       picture TEXT,
-      role TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('user', 'admin')),
+      role TEXT NOT NULL DEFAULT 'viewer' CHECK (role IN ('admin', 'warehouse', 'procurement', 'viewer')),
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       last_login_at TIMESTAMPTZ
     );
@@ -118,6 +118,21 @@ export async function initializeDatabase(pool) {
     CREATE INDEX IF NOT EXISTS idx_po_line_items_po ON po_line_items(purchase_order_id);
     CREATE INDEX IF NOT EXISTS idx_transactions_part ON inventory_transactions(part_id);
     CREATE INDEX IF NOT EXISTS idx_transactions_created ON inventory_transactions(created_at);
+  `);
+
+  // Migrate existing databases: expand role constraint and update old 'user' role
+  await pool.query(`
+    DO $$
+    BEGIN
+      -- Update old 'user' role to 'viewer'
+      UPDATE users SET role = 'viewer' WHERE role = 'user';
+      -- Drop old constraint and add new one (idempotent)
+      ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
+      ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('admin', 'warehouse', 'procurement', 'viewer'));
+    EXCEPTION WHEN OTHERS THEN
+      -- Constraint already correct, ignore
+      NULL;
+    END $$;
   `);
 
   // Seed admin user if users table is empty
