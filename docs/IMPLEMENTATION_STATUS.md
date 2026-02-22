@@ -15,10 +15,11 @@ Last updated: 2026-02-22
 - **F2** FIFO consumption (oldest first, partial layers)
 - **F3** Valuation Report with CSV export
 - **F4** Audit trail for all transactions
+- **7.2** Admin Dashboard — overview stats, inventory by location type, low-stock alerts (qty <= 5), open PO summary
+- **8.3** User Management & Auth — Google OAuth login, session-based auth, email allowlist, admin UI for user CRUD, roles (admin/warehouse/procurement/viewer), requireAdmin middleware
 
-## Partially Implemented
-- **7.2** Admin Dashboard — basic stats only; missing CM vs warehouse, low-stock alerts, open PO summary
-- **8.3** User Management & Auth — Google OAuth login, session-based auth, email allowlist; admin UI and role enforcement deferred
+## Not Yet Implemented (Deferred)
+- **8.3 partial** — Role-based enforcement on non-admin endpoints (all authenticated users can access all API routes); user deactivation (admins remove users from allowlist instead)
 
 ## Not Implemented
 - **1.2** Part Variants

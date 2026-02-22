@@ -6,12 +6,12 @@ describe('Authentication', () => {
   describe('Users table', () => {
     test('users table exists and accepts inserts', async () => {
       const { rows } = await query(
-        "INSERT INTO users (email, name, role) VALUES ('test@example.com', 'Test User', 'user') RETURNING id, email, name, role"
+        "INSERT INTO users (email, name, role) VALUES ('test@example.com', 'Test User', 'viewer') RETURNING id, email, name, role"
       );
       expect(rows[0]).toMatchObject({
         email: 'test@example.com',
         name: 'Test User',
-        role: 'user',
+        role: 'viewer',
       });
       // Cleanup
       await query('DELETE FROM users WHERE email = $1', ['test@example.com']);
@@ -25,10 +25,22 @@ describe('Authentication', () => {
       await query("DELETE FROM users WHERE email = 'dup@example.com'");
     });
 
-    test('role must be user or admin', async () => {
+    test('role must be admin, warehouse, procurement, or viewer', async () => {
       await expect(
         query("INSERT INTO users (email, name, role) VALUES ('bad@example.com', 'Bad', 'superadmin')")
       ).rejects.toThrow();
+    });
+
+    test('accepts all valid roles', async () => {
+      for (const role of ['admin', 'warehouse', 'procurement', 'viewer']) {
+        const email = `role-${role}@example.com`;
+        const { rows } = await query(
+          `INSERT INTO users (email, name, role) VALUES ($1, 'Role Test', $2) RETURNING role`,
+          [email, role]
+        );
+        expect(rows[0].role).toBe(role);
+        await query('DELETE FROM users WHERE email = $1', [email]);
+      }
     });
   });
 
