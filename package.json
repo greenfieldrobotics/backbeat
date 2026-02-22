@@ -4,11 +4,13 @@
   "description": "Backbeat ERP System - Stash (Inventory Management) Module",
   "private": true,
   "scripts": {
+    "postinstall": "cd server && npm install && cd ../client && npm install",
+    "build": "cd client && npm run build",
+    "start": "node server/src/index.js",
     "dev": "npm run dev:server & npm run dev:client",
     "dev:server": "cd server && npm run dev",
     "dev:client": "cd client && npm run dev",
     "seed": "cd server && npm run seed",
-    "start": "cd server && npm start",
     "test:e2e": "npx playwright test; cd server && npm run seed"
   },
   "devDependencies": {

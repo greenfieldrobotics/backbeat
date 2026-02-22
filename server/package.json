@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "node --env-file=../.env --watch src/index.js",
-    "start": "node --env-file=../.env src/index.js",
+    "start": "node src/index.js",
     "seed": "node src/db/seed.js",
     "test": "NODE_ENV=test DATABASE_URL=postgres://backbeat:backbeat@postgres:5432/backbeat_test node --experimental-vm-modules node_modules/.bin/jest --forceExit"
   },
