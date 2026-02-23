@@ -6,6 +6,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { execFileSync } from 'child_process';
 import pg from 'pg';
 import { initializeDatabase } from './schema.js';
 
@@ -209,3 +210,19 @@ try {
 }
 
 await pool.end();
+
+// --- Auto-import BarCloud history if CSV exists ---
+const barcloudPath = '/app/Barcloud-History.csv';
+if (fs.existsSync(barcloudPath)) {
+  console.log('\nBarCloud history found, importing transactions...');
+  const importScript = path.join(__dirname, 'import-barcloud.js');
+  try {
+    execFileSync('node', [importScript, barcloudPath], { stdio: 'inherit' });
+  } catch (err) {
+    console.error('BarCloud import failed:', err.message);
+    process.exit(1);
+  }
+} else {
+  console.log('\nNo Barcloud-History.csv found at /app/Barcloud-History.csv — skipping transaction import.');
+  console.log('To load historical transactions, place the CSV and re-run: node src/db/seed.js');
+}
