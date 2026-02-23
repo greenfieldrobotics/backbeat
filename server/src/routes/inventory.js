@@ -726,7 +726,7 @@ router.get('/valuation', async (req, res) => {
     ORDER BY p.part_number, l.name
   `);
 
-  const grandTotal = summary.reduce((sum, row) => sum + row.total_value, 0);
+  const grandTotal = summary.reduce((sum, row) => sum + Number(row.total_value), 0);
 
   if (format === 'csv') {
     const csvLines = [

@@ -20,7 +20,7 @@ export default function InventoryPage() {
   if (loading) return <div>Loading...</div>;
 
   const totalQty = inventory.reduce((sum, r) => sum + r.quantity_on_hand, 0);
-  const totalValue = valuation?.grand_total || 0;
+  const totalValue = Number(valuation?.grand_total) || 0;
   const uniqueParts = new Set(inventory.map(r => r.part_id)).size;
   const uniqueLocations = new Set(inventory.map(r => r.location_id)).size;
 
