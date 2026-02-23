@@ -6,15 +6,25 @@ const router = Router();
 // GET /api/dashboard — aggregated dashboard data
 router.get('/', async (req, res) => {
   try {
-    // 1. Inventory by location type
+    // 1. Inventory by location type (aggregate separately to avoid cross-product)
     const inventoryByType = await query(`
       SELECT l.type,
-             COALESCE(SUM(i.quantity_on_hand), 0) AS total_qty,
-             COALESCE(SUM(fl.remaining_qty * fl.unit_cost), 0) AS total_value
-      FROM locations l
-      LEFT JOIN inventory i ON i.location_id = l.id
-      LEFT JOIN fifo_layers fl ON fl.location_id = l.id AND fl.remaining_qty > 0
-      GROUP BY l.type
+             COALESCE(inv.total_qty, 0) AS total_qty,
+             COALESCE(val.total_value, 0) AS total_value
+      FROM (SELECT DISTINCT type FROM locations) l
+      LEFT JOIN (
+        SELECT l2.type, SUM(i.quantity_on_hand) AS total_qty
+        FROM inventory i
+        JOIN locations l2 ON i.location_id = l2.id
+        GROUP BY l2.type
+      ) inv ON inv.type = l.type
+      LEFT JOIN (
+        SELECT l2.type, SUM(fl.remaining_qty * fl.unit_cost) AS total_value
+        FROM fifo_layers fl
+        JOIN locations l2 ON fl.location_id = l2.id
+        WHERE fl.remaining_qty > 0
+        GROUP BY l2.type
+      ) val ON val.type = l.type
       ORDER BY l.type
     `);
 
