@@ -1,8 +1,8 @@
 FROM node:20-bookworm
 
-# Git and GitHub CLI for development workflows
+# Git, GitHub CLI, and PostgreSQL client for development workflows
 RUN apt-get update && \
-    apt-get install -y git && \
+    apt-get install -y git postgresql-client && \
     rm -rf /var/lib/apt/lists/*
 RUN (type -p wget >/dev/null || (apt-get update && apt-get install -y wget)) \
     && mkdir -p -m 755 /etc/apt/keyrings \

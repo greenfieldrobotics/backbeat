@@ -36,11 +36,16 @@ NEEDS_SEED=$(node -e "
 " 2>/dev/null && echo "no" || echo "yes")
 
 if [ "$NEEDS_SEED" = "yes" ]; then
-  echo "Seeding database..."
-  node src/db/seed.js
-  if [ -f /app/Barcloud-History.csv ]; then
-    echo "Importing BarCloud data..."
-    node src/db/import-barcloud.js /app/Barcloud-History.csv
+  if [ -f /app/server/data/dev-snapshot.sql.gz ]; then
+    echo "Restoring database from snapshot..."
+    gunzip -c /app/server/data/dev-snapshot.sql.gz | PGPASSWORD=backbeat psql -h postgres -U backbeat backbeat > /dev/null
+  else
+    echo "Seeding database..."
+    node src/db/seed.js
+    if [ -f /app/Barcloud-History.csv ]; then
+      echo "Importing BarCloud data..."
+      node src/db/import-barcloud.js /app/Barcloud-History.csv
+    fi
   fi
 else
   echo "Database already seeded, skipping."
