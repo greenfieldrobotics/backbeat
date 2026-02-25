@@ -728,3 +728,162 @@ Expected:
 
 - GET `/api/health` → 200 with `{ status: "ok", module: "Stash", version: "0.1.0" }`
 - (If database is unreachable, returns 503 — this is difficult to test but worth noting)
+
+---
+
+## 16. Admin Dashboard (Story 7.2)
+
+> The dashboard endpoint aggregates data from inventory, FIFO layers, locations, and POs.
+> The $40M bug in production was a dashboard query issue — these tests prevent regression.
+
+### Endpoint: GET /api/dashboard
+
+#### Response Structure
+- Verify response contains three top-level keys: `inventory_by_type`, `low_stock_alerts`, `open_purchase_orders`
+
+#### Inventory by Location Type
+```
+Setup:
+  Create Location A (type: Warehouse)
+  Create Location B (type: Regional Site)
+  Create Location C (type: Contract Manufacturer)
+  Receive 10 units of Part X @ $5.00 at Location A (Warehouse)
+  Receive 5 units of Part X @ $5.00 at Location B (Regional Site)
+  Receive 3 units of Part Y @ $20.00 at Location A (Warehouse)
+
+Expected inventory_by_type:
+  Warehouse: total_qty = 13, total_value = (10 × $5) + (3 × $20) = $110.00
+  Regional Site: total_qty = 5, total_value = 5 × $5 = $25.00
+  Contract Manufacturer: total_qty = 0, total_value = $0.00 (or omitted)
+```
+
+#### Critical: No Double-Counting
+- The sum of `total_qty` across all location types must equal the sum of all
+  `inventory.quantity_on_hand` records
+- The sum of `total_value` across all location types must equal the `grand_total`
+  from the valuation report (`GET /api/inventory/valuation`)
+- **Specific test:** After receiving, moving, issuing, and disposing inventory across
+  multiple locations, verify dashboard totals still match valuation report totals exactly
+
+#### Low Stock Alerts
+- Parts with `quantity_on_hand` between 1 and 5 appear in `low_stock_alerts`
+- Parts with `quantity_on_hand` = 0 do NOT appear (nothing to alert on)
+- Parts with `quantity_on_hand` > 5 do NOT appear
+- Each alert includes: part_number, description, location_name, quantity_on_hand
+- Results sorted by lowest quantity first
+
+#### Low Stock Threshold Scenarios
+```
+Setup:
+  Part A at Location 1: qty = 3  → appears in alerts
+  Part B at Location 1: qty = 5  → appears in alerts
+  Part C at Location 1: qty = 6  → does NOT appear
+  Part D at Location 1: qty = 0  → does NOT appear
+  Part E at Location 1: qty = 1  → appears in alerts
+
+Expected: 3 alerts, ordered: Part E (1), Part A (3), Part B (5)
+```
+
+#### Open Purchase Orders
+- Only POs with status ≠ 'Closed' appear
+- Each open PO includes: id, po_number, status, supplier_name, expected_delivery_date,
+  total_value, total_qty_ordered, total_qty_received
+- **Aggregation test:** Create PO with 3 line items (10 @ $5, 20 @ $8, 5 @ $15) →
+  total_value = $335, total_qty_ordered = 35, total_qty_received = 0
+- **Partial receipt:** Receive some items → total_qty_received updates correctly
+- **Closed POs excluded:** Close a PO → it no longer appears in open_purchase_orders
+
+#### Dashboard After Transactions
+- After issue: inventory_by_type totals decrease, low_stock_alerts may gain entries
+- After move: location-type totals shift (e.g., Warehouse decreases, Regional Site increases)
+  but grand total stays the same
+- After dispose: totals decrease
+- After return: totals increase
+- After adjustment: totals change by the adjustment delta
+
+#### Empty State
+- No inventory, no POs → dashboard returns empty arrays and zero totals without errors
+
+---
+
+## 17. Authentication & User Management (Story 8.3)
+
+> Auth middleware bypasses in test mode (`NODE_ENV=test`), so these tests verify
+> the middleware logic and user CRUD separately.
+
+### Auth Middleware: requireAuth
+
+> Note: `requireAuth` is bypassed when `NODE_ENV === 'test'` or when `GOOGLE_CLIENT_ID`
+> is not configured. These tests verify the middleware's LOGIC, not the OAuth flow.
+
+- **Unauthenticated request to protected endpoint:** → 401 `{ error: "Authentication required" }`
+- **Authenticated request:** → passes through to handler
+- **Dev mode (no GOOGLE_CLIENT_ID):** → bypasses auth (convenience for local development)
+
+### Auth Middleware: requireAdmin
+
+- **Unauthenticated request:** → 401 `{ error: "Authentication required" }`
+- **Authenticated non-admin (role: warehouse):** → 403 `{ error: "Admin access required" }`
+- **Authenticated non-admin (role: viewer):** → 403 `{ error: "Admin access required" }`
+- **Authenticated admin:** → passes through to handler
+
+### Auth Endpoint: GET /auth/me
+
+- **Authenticated user:** → 200 with `{ id, email, name, picture, role }`
+- **Unauthenticated (OAuth configured):** → 401 `{ error: "Not authenticated" }`
+- **Dev mode (OAuth not configured):** → 200 with dev user `{ id: 0, email: "dev@localhost", name: "Dev User", role: "admin" }`
+
+### Auth Endpoint: POST /auth/logout
+
+- **Authenticated user:** → 200 `{ ok: true }`, session destroyed, cookie cleared
+
+### User CRUD (Admin Only)
+
+#### GET /api/users — List Users
+- Returns array of all users sorted by name/email
+- Each user includes: id, email, name, role, picture, created_at, last_login_at
+- **Non-admin access:** → 403
+
+#### POST /api/users — Create User (Add to Allowlist)
+
+**Happy Path:**
+- Create user with email, name, role → 201, user returned with all fields
+- Create user with only email → 201, name defaults to "", role defaults to "viewer"
+- Email is trimmed and lowercased: `" SEEMA@GreenField.com "` → stored as `"seema@greenfield.com"`
+
+**Validation & Edge Cases:**
+- **Missing email:** → 400 `{ error: "Email is required" }`
+- **Duplicate email:** → 409 `{ error: "A user with this email already exists" }`
+- **Invalid role:** `role: "superadmin"` → 400 `{ error: "Invalid role. Must be one of: admin, warehouse, procurement, viewer" }`
+- **Valid roles:** admin, warehouse, procurement, viewer
+- **Non-admin access:** → 403
+
+#### PUT /api/users/:id — Update User
+
+**Happy Path:**
+- Update name → 200, name changed
+- Update role → 200, role changed
+- Update both → 200, both changed
+
+**Validation & Edge Cases:**
+- **Non-existent user:** → 404 `{ error: "User not found" }`
+- **Invalid role:** → 400
+- **No fields provided:** → 400 `{ error: "No fields to update" }`
+- **Non-admin access:** → 403
+
+#### DELETE /api/users/:id — Remove User
+
+**Happy Path:**
+- Delete existing user → 204
+- Deleted user can no longer log in (removed from allowlist)
+
+**Validation & Edge Cases:**
+- **Non-existent user:** → 404 `{ error: "User not found" }`
+- **Self-deletion:** Admin tries to delete their own account → 400 `{ error: "Cannot delete your own account" }`
+- **Non-admin access:** → 403
+
+### Allowlist Behavior (Integration)
+- User NOT in users table cannot authenticate via Google OAuth → redirected to `/login?error=not-allowed`
+- User IN users table authenticates successfully → session created, `/auth/me` returns their info
+- Admin creates user → that email can now authenticate
+- Admin deletes user → that email can no longer authenticate

@@ -387,6 +387,10 @@ blocking availability. See Story 9.1.
 - Admin-only adjustments
 - Full transaction log with user and timestamp
 - All inventory mutations produce an audit record (no silent changes)
+- Supported transaction types: RECEIVE, ISSUE, MOVE, DISPOSE, RETURN, ADJUSTMENT
+- `GET /api/inventory/transactions` supports filtering by part_id, location_id, and limit
+- Results ordered by created_at DESC (newest first)
+- No PUT or DELETE endpoints exist for transactions or FIFO layers (immutability enforced by design)
 
 ---
 
@@ -408,18 +412,19 @@ blocking availability. See Story 9.1.
 
 *Source enhancement: Seema Gupta — Inventory Management Proposal, Section 9 (Launch Success Metrics)*
 
-**Acceptance Criteria:**
-- Inventory value summary (total and by location)
-- Inventory at CM vs warehouse
-- Low-stock alerts
-- Open PO summary
-- **Operational health metrics (from Seema's launch success criteria):**
-  - Same-day receipt rate (target: ≥ 90%)
-  - ISSUE flag backlog: count of open issues, count aged > 14 days
-  - Adjustment rate: adjust-in count trending month-over-month (target: downward)
-  - WIP inventory by project
-  - Cycle count accuracy for high-value parts (target: ≥ 98%)
-  - Assembly cost integrity: last audit pass/fail status
+**Implemented (current):**
+- `GET /api/dashboard` returns three data sections:
+- **Inventory by location type:** total quantity and total value grouped by location type (Warehouse, Regional Site, Contract Manufacturer) — aggregated from inventory and FIFO layers tables
+- **Low-stock alerts:** parts with quantity_on_hand between 1 and 5, sorted by lowest quantity first — includes part_number, description, location_name, quantity_on_hand
+- **Open PO summary:** all POs with status ≠ 'Closed', including supplier_name, expected_delivery_date, total_value, total_qty_ordered, total_qty_received
+
+**Not yet implemented (future — from Seema's launch success criteria):**
+- Same-day receipt rate (target: ≥ 90%)
+- ISSUE flag backlog: count of open issues, count aged > 14 days
+- Adjustment rate: adjust-in count trending month-over-month (target: downward)
+- WIP inventory by project
+- Cycle count accuracy for high-value parts (target: ≥ 98%)
+- Assembly cost integrity: last audit pass/fail status
 
 ---
 
@@ -449,15 +454,37 @@ blocking availability. See Story 9.1.
 
 ---
 
-### Story 8.3 - User Management
+### Story 8.3 - User Management & Authentication
 **Role:** Admin
-**Goal:** Add, edit, and deactivate user accounts so access is controlled.
+**Goal:** Add, edit, and remove user accounts so access is controlled, and authenticate users via Google OAuth.
 
-**Acceptance Criteria:**
-- Add new users with role assignment
-- Edit user details and roles
-- Deactivate (not delete) users
-- Roles: Admin, Warehouse Staff, Procurement, Viewer
+**Implemented (current):**
+
+*Authentication:*
+- Google OAuth 2.0 login (via Passport.js)
+- Session-based auth with 7-day session expiry
+- Email allowlist: only users pre-added to the users table can authenticate
+- `GET /auth/me` returns current user (id, email, name, picture, role)
+- `POST /auth/logout` destroys session and clears cookie
+- Dev mode: auth bypassed when GOOGLE_CLIENT_ID is not configured
+- Test mode: auth bypassed when NODE_ENV=test
+
+*User CRUD (admin-only via requireAdmin middleware):*
+- `GET /api/users` — list all users
+- `POST /api/users` — add user to allowlist (email required, name optional, role defaults to "viewer")
+- `PUT /api/users/:id` — update user name and/or role
+- `DELETE /api/users/:id` — remove user from allowlist (cannot delete own account)
+- Email is trimmed and lowercased on creation
+- Valid roles: admin, warehouse, procurement, viewer
+- Duplicate email detection (409)
+
+*Middleware:*
+- `requireAuth` — protects all `/api/*` routes; returns 401 if unauthenticated
+- `requireAdmin` — protects user management routes; returns 403 if authenticated but non-admin
+
+**Not yet implemented (deferred):**
+- Role-based enforcement on non-admin API endpoints (all authenticated users can currently access all routes)
+- User deactivation (admins delete users from allowlist instead of deactivating)
 
 ---
 
