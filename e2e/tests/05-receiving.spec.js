@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { truncateAllTables, closePool } from '../helpers/db.js';
-import { createTestPart, createTestLocation, createTestSupplier } from '../helpers/api-setup.js';
+import { createTestPart, createTestLocation, createTestSupplier, selectPart } from '../helpers/api-setup.js';
 
 test.describe('Receiving workflow', () => {
   let part, location, supplier;
@@ -27,7 +27,7 @@ test.describe('Receiving workflow', () => {
     await modal.locator('.form-group').filter({ hasText: 'Supplier' }).locator('select').selectOption(String(supplier.id));
 
     const lineContainer = modal.locator('div[style*="display: flex"]').first();
-    await lineContainer.locator('select').selectOption(String(part.id));
+    await selectPart(page, part.part_number, lineContainer);
     await lineContainer.locator('input[type="number"]').first().fill('10');
     await lineContainer.locator('input[type="number"]').nth(1).fill('10.00');
 

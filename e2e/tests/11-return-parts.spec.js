@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { truncateAllTables, closePool } from '../helpers/db.js';
-import { createTestPart, createTestLocation, createTestSupplier, receiveInventoryViaAPI } from '../helpers/api-setup.js';
+import { createTestPart, createTestLocation, createTestSupplier, receiveInventoryViaAPI, selectPart } from '../helpers/api-setup.js';
 
 test.describe('Return Parts', () => {
   let part, location, supplier;
@@ -22,7 +22,7 @@ test.describe('Return Parts', () => {
     await page.goto('/return');
 
     await expect(page.locator('h1')).toHaveText('Return Parts');
-    await expect(page.locator('.card .form-group').filter({ hasText: 'Part' }).locator('select')).toBeVisible();
+    await expect(page.locator('.card .form-group').filter({ hasText: 'Part' }).locator('.part-search input[type="text"]')).toBeVisible();
     await expect(page.locator('.form-group').filter({ hasText: 'Location' }).locator('select')).toBeVisible();
   });
 
@@ -30,7 +30,7 @@ test.describe('Return Parts', () => {
     await page.goto('/return');
 
     // Select part
-    await page.locator('.card .form-group').filter({ hasText: 'Part' }).locator('select').selectOption(String(part.id));
+    await selectPart(page, part.part_number);
     // Select location
     await page.locator('.form-group').filter({ hasText: 'Location' }).locator('select').selectOption(String(location.id));
 
@@ -43,7 +43,7 @@ test.describe('Return Parts', () => {
   test('return parts successfully', async ({ page }) => {
     await page.goto('/return');
 
-    await page.locator('.card .form-group').filter({ hasText: 'Part' }).locator('select').selectOption(String(part.id));
+    await selectPart(page, part.part_number);
     await page.locator('.form-group').filter({ hasText: 'Location' }).locator('select').selectOption(String(location.id));
     await page.locator('.form-group').filter({ hasText: 'Quantity' }).locator('input').fill('3');
     await page.locator('.form-group').filter({ hasText: 'Unit Cost' }).locator('input').fill('10.00');

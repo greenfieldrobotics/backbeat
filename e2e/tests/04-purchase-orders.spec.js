@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { truncateAllTables, closePool } from '../helpers/db.js';
-import { createTestPart, createTestLocation, createTestSupplier } from '../helpers/api-setup.js';
+import { createTestPart, createTestLocation, createTestSupplier, selectPart } from '../helpers/api-setup.js';
 
 test.describe('Purchase Orders', () => {
   let part, location, supplier;
@@ -36,11 +36,8 @@ test.describe('Purchase Orders', () => {
     await modal.locator('input[type="date"]').fill('2026-06-15');
 
     // Fill first line item - Part
-    const lineSelects = modal.locator('.form-group select');
-    // lineSelects: [0]=supplier, [1]=first line part
-    // But line items have their own selects inside flex containers
     const lineContainer = modal.locator('div[style*="display: flex"]').first();
-    await lineContainer.locator('select').selectOption(String(part.id));
+    await selectPart(page, part.part_number, lineContainer);
     await lineContainer.locator('input[type="number"]').first().fill('10');
     await lineContainer.locator('input[type="number"]').nth(1).fill('15.00');
 
@@ -94,14 +91,14 @@ test.describe('Purchase Orders', () => {
 
     // Fill first line item
     const firstLine = modal.locator('div[style*="display: flex"]').first();
-    await firstLine.locator('select').selectOption(String(part.id));
+    await selectPart(page, part.part_number, firstLine);
     await firstLine.locator('input[type="number"]').first().fill('5');
     await firstLine.locator('input[type="number"]').nth(1).fill('15.00');
 
     // Add second line item
     await modal.getByRole('button', { name: '+ Add Line' }).click();
     const secondLine = modal.locator('div[style*="display: flex"]').nth(1);
-    await secondLine.locator('select').selectOption(String(part2.id));
+    await selectPart(page, part2.part_number, secondLine);
     await secondLine.locator('input[type="number"]').first().fill('3');
     await secondLine.locator('input[type="number"]').nth(1).fill('20.00');
 

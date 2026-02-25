@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { truncateAllTables, closePool } from '../helpers/db.js';
-import { createTestPart, createTestLocation, createTestSupplier, receiveInventoryViaAPI } from '../helpers/api-setup.js';
+import { createTestPart, createTestLocation, createTestSupplier, receiveInventoryViaAPI, selectPart } from '../helpers/api-setup.js';
 
 test.describe('Dispose Inventory', () => {
   let part, location, supplier;
@@ -20,18 +20,18 @@ test.describe('Dispose Inventory', () => {
   test('cascading dropdowns for dispose', async ({ page }) => {
     await page.goto('/dispose');
 
-    await expect(page.locator('.card .form-group').filter({ hasText: 'Part' }).locator('select')).toBeVisible();
+    await expect(page.locator('.card .form-group').filter({ hasText: 'Part' }).locator('.part-search input[type="text"]')).toBeVisible();
     await expect(page.locator('.form-group').filter({ hasText: 'Location' })).not.toBeVisible();
 
     // Select part
-    await page.locator('.card .form-group').filter({ hasText: 'Part' }).locator('select').selectOption(String(part.id));
+    await selectPart(page, part.part_number);
     await expect(page.locator('.form-group').filter({ hasText: 'Location' }).locator('select')).toBeVisible();
   });
 
   test('dispose button is disabled without reason', async ({ page }) => {
     await page.goto('/dispose');
 
-    await page.locator('.card .form-group').filter({ hasText: 'Part' }).locator('select').selectOption(String(part.id));
+    await selectPart(page, part.part_number);
     await page.locator('.form-group').filter({ hasText: 'Location' }).locator('select').selectOption(String(location.id));
     await page.locator('.form-group').filter({ hasText: /Quantity.*available/ }).locator('input').fill('1');
 
@@ -46,7 +46,7 @@ test.describe('Dispose Inventory', () => {
   test('dispose inventory successfully', async ({ page }) => {
     await page.goto('/dispose');
 
-    await page.locator('.card .form-group').filter({ hasText: 'Part' }).locator('select').selectOption(String(part.id));
+    await selectPart(page, part.part_number);
     await page.locator('.form-group').filter({ hasText: 'Location' }).locator('select').selectOption(String(location.id));
     await page.locator('.form-group').filter({ hasText: /Quantity.*available/ }).locator('input').fill('3');
     await page.locator('.form-group').filter({ hasText: 'Disposal Reason' }).locator('select').selectOption('Damaged');

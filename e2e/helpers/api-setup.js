@@ -86,6 +86,17 @@ export async function receiveInventoryViaAPI({ partId, locationId, supplierId, q
  * Return parts to inventory via the API.
  * Returns the response body.
  */
+/**
+ * Select a part using the PartSearch autocomplete component.
+ * Fills the text input and clicks the matching dropdown option.
+ */
+export async function selectPart(page, partNumber, container) {
+  const scope = container || page;
+  const partSearch = scope.locator('.part-search').first();
+  await partSearch.locator('input[type="text"]').fill(partNumber);
+  await partSearch.locator('.part-search-option').filter({ hasText: partNumber }).first().click();
+}
+
 export async function returnPartsViaAPI({ partId, locationId, qty, unitCost, reason, reference }) {
   return post('/inventory/return', {
     part_id: partId,

@@ -10,3 +10,4 @@ Barcloud-History.csv
 client_secret*.json
 test-results/
 playwright-report/
+e2e-results.log

@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { truncateAllTables, closePool } from '../helpers/db.js';
-import { createTestPart, createTestLocation, createTestSupplier, receiveInventoryViaAPI } from '../helpers/api-setup.js';
+import { createTestPart, createTestLocation, createTestSupplier, receiveInventoryViaAPI, selectPart } from '../helpers/api-setup.js';
 
 test.describe('Adjust Inventory', () => {
   let part, location, supplier;
@@ -21,14 +21,14 @@ test.describe('Adjust Inventory', () => {
     await page.goto('/adjust');
 
     await expect(page.locator('h1')).toHaveText('Adjust Inventory');
-    await expect(page.locator('.card .form-group').filter({ hasText: 'Part' }).locator('select')).toBeVisible();
+    await expect(page.locator('.card .form-group').filter({ hasText: 'Part' }).locator('.part-search input[type="text"]')).toBeVisible();
     await expect(page.locator('.form-group').filter({ hasText: 'Location' }).locator('select')).toBeVisible();
   });
 
   test('shows current quantity and delta after selecting part and location', async ({ page }) => {
     await page.goto('/adjust');
 
-    await page.locator('.card .form-group').filter({ hasText: 'Part' }).locator('select').selectOption(String(part.id));
+    await selectPart(page, part.part_number);
     await page.locator('.form-group').filter({ hasText: 'Location' }).locator('select').selectOption(String(location.id));
 
     // Should show current system quantity
@@ -42,7 +42,7 @@ test.describe('Adjust Inventory', () => {
   test('negative adjustment (shortage) succeeds', async ({ page }) => {
     await page.goto('/adjust');
 
-    await page.locator('.card .form-group').filter({ hasText: 'Part' }).locator('select').selectOption(String(part.id));
+    await selectPart(page, part.part_number);
     await page.locator('.form-group').filter({ hasText: 'Location' }).locator('select').selectOption(String(location.id));
     await page.locator('.form-group').filter({ hasText: 'New Quantity' }).locator('input').fill('7');
     await page.locator('.form-group').filter({ hasText: 'Reason' }).locator('select').selectOption('Physical count');
@@ -64,7 +64,7 @@ test.describe('Adjust Inventory', () => {
   test('positive adjustment (overage) succeeds', async ({ page }) => {
     await page.goto('/adjust');
 
-    await page.locator('.card .form-group').filter({ hasText: 'Part' }).locator('select').selectOption(String(part.id));
+    await selectPart(page, part.part_number);
     await page.locator('.form-group').filter({ hasText: 'Location' }).locator('select').selectOption(String(location.id));
 
     // After previous negative adjustment, current should be 7

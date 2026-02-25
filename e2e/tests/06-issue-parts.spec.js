@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { truncateAllTables, closePool } from '../helpers/db.js';
-import { createTestPart, createTestLocation, createTestSupplier, receiveInventoryViaAPI } from '../helpers/api-setup.js';
+import { createTestPart, createTestLocation, createTestSupplier, receiveInventoryViaAPI, selectPart } from '../helpers/api-setup.js';
 
 test.describe('Issue Parts', () => {
   let part, location, supplier;
@@ -26,8 +26,7 @@ test.describe('Issue Parts', () => {
     await expect(locationGroup).not.toBeVisible();
 
     // Select the part
-    const partSelect = page.locator('.card .form-group').filter({ hasText: 'Part' }).locator('select');
-    await partSelect.selectOption(String(part.id));
+    await selectPart(page, part.part_number);
 
     // Location dropdown should now appear
     await expect(locationGroup.locator('select')).toBeVisible();
@@ -43,7 +42,7 @@ test.describe('Issue Parts', () => {
     await page.goto('/issue');
 
     // Select part
-    await page.locator('.card .form-group').filter({ hasText: 'Part' }).locator('select').selectOption(String(part.id));
+    await selectPart(page, part.part_number);
 
     // Select location
     await page.locator('.form-group').filter({ hasText: 'Location' }).locator('select').selectOption(String(location.id));
@@ -71,7 +70,7 @@ test.describe('Issue Parts', () => {
     await page.goto('/issue');
 
     // Issue another set to see the FIFO table
-    await page.locator('.card .form-group').filter({ hasText: 'Part' }).locator('select').selectOption(String(part.id));
+    await selectPart(page, part.part_number);
     await page.locator('.form-group').filter({ hasText: 'Location' }).locator('select').selectOption(String(location.id));
     await page.locator('.form-group').filter({ hasText: /Quantity.*available/ }).locator('input').fill('2');
     await page.locator('.form-group').filter({ hasText: 'Reason' }).locator('select').selectOption('R&D');

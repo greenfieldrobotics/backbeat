@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { truncateAllTables, closePool } from '../helpers/db.js';
-import { createTestPart, createTestLocation, createTestSupplier, receiveInventoryViaAPI } from '../helpers/api-setup.js';
+import { createTestPart, createTestLocation, createTestSupplier, receiveInventoryViaAPI, selectPart } from '../helpers/api-setup.js';
 
 test.describe('Move Inventory', () => {
   let part, locationA, locationB, supplier;
@@ -21,12 +21,12 @@ test.describe('Move Inventory', () => {
   test('cascading dropdowns: part → from → to', async ({ page }) => {
     await page.goto('/move');
 
-    // Only Part select should be visible initially
-    await expect(page.locator('.card .form-group').filter({ hasText: 'Part' }).locator('select')).toBeVisible();
+    // Only Part input should be visible initially
+    await expect(page.locator('.card .form-group').filter({ hasText: 'Part' }).locator('.part-search input[type="text"]')).toBeVisible();
     await expect(page.locator('.form-group').filter({ hasText: 'From Location' })).not.toBeVisible();
 
     // Select part
-    await page.locator('.card .form-group').filter({ hasText: 'Part' }).locator('select').selectOption(String(part.id));
+    await selectPart(page, part.part_number);
 
     // From Location should appear
     await expect(page.locator('.form-group').filter({ hasText: 'From Location' }).locator('select')).toBeVisible();
@@ -41,7 +41,7 @@ test.describe('Move Inventory', () => {
   test('move inventory between locations', async ({ page }) => {
     await page.goto('/move');
 
-    await page.locator('.card .form-group').filter({ hasText: 'Part' }).locator('select').selectOption(String(part.id));
+    await selectPart(page, part.part_number);
     await page.locator('.form-group').filter({ hasText: 'From Location' }).locator('select').selectOption(String(locationA.id));
     await page.locator('.form-group').filter({ hasText: 'To Location' }).locator('select').selectOption(String(locationB.id));
     await page.locator('.form-group').filter({ hasText: /Quantity.*available/ }).locator('input').fill('5');
@@ -63,7 +63,9 @@ test.describe('Move Inventory', () => {
     await page.goto('/');
     // 10 at source + 5 at destination = 15 total
     await expect(page.locator('.stat-card').filter({ hasText: 'Total Items' }).locator('.value')).toHaveText('15');
-    // Should see 2 rows (one per location)
-    await expect(page.locator('tbody tr')).toHaveCount(2);
+    // Should see 2 rows in the Inventory Detail table (one per location)
+    // Use Classification column header to distinguish from the Low-Stock Alerts table
+    const inventoryTable = page.locator('table').filter({ has: page.locator('th', { hasText: 'Classification' }) });
+    await expect(inventoryTable.locator('tbody tr')).toHaveCount(2);
   });
 });

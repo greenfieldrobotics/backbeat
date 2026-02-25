@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { truncateAllTables, closePool } from '../helpers/db.js';
+import { selectPart } from '../helpers/api-setup.js';
 
 test.describe('Full lifecycle workflow', () => {
   test.beforeAll(async () => {
@@ -70,7 +71,7 @@ test.describe('Full lifecycle workflow', () => {
     await modal.locator('input[type="date"]').fill('2026-09-01');
 
     const lineContainer = modal.locator('div[style*="display: flex"]').first();
-    await lineContainer.locator('select').selectOption(String(part.id));
+    await selectPart(page, part.part_number, lineContainer);
     await lineContainer.locator('input[type="number"]').first().fill('20');
     await lineContainer.locator('input[type="number"]').nth(1).fill('50.00');
 
@@ -93,7 +94,7 @@ test.describe('Full lifecycle workflow', () => {
 
     // --- Step 6: Issue some parts ---
     await page.goto('/issue');
-    await page.locator('.card .form-group').filter({ hasText: 'Part' }).locator('select').selectOption(String(part.id));
+    await selectPart(page, part.part_number);
     await page.locator('.form-group').filter({ hasText: 'Location' }).locator('select').selectOption(String(hqLoc.id));
     await page.locator('.form-group').filter({ hasText: /Quantity.*available/ }).locator('input').fill('5');
     await page.locator('.form-group').filter({ hasText: 'Issue To' }).locator('input').fill('Robot Alpha');
@@ -103,7 +104,7 @@ test.describe('Full lifecycle workflow', () => {
 
     // --- Step 7: Move some inventory ---
     await page.goto('/move');
-    await page.locator('.card .form-group').filter({ hasText: 'Part' }).locator('select').selectOption(String(part.id));
+    await selectPart(page, part.part_number);
     await page.locator('.form-group').filter({ hasText: 'From Location' }).locator('select').selectOption(String(hqLoc.id));
     await page.locator('.form-group').filter({ hasText: 'To Location' }).locator('select').selectOption(String(fieldLoc.id));
     await page.locator('.form-group').filter({ hasText: /Quantity.*available/ }).locator('input').fill('3');
@@ -112,7 +113,7 @@ test.describe('Full lifecycle workflow', () => {
 
     // --- Step 8: Dispose some inventory ---
     await page.goto('/dispose');
-    await page.locator('.card .form-group').filter({ hasText: 'Part' }).locator('select').selectOption(String(part.id));
+    await selectPart(page, part.part_number);
     await page.locator('.form-group').filter({ hasText: 'Location' }).locator('select').selectOption(String(hqLoc.id));
     await page.locator('.form-group').filter({ hasText: /Quantity.*available/ }).locator('input').fill('2');
     await page.locator('.form-group').filter({ hasText: 'Disposal Reason' }).locator('select').selectOption('Damaged');
@@ -132,9 +133,10 @@ test.describe('Full lifecycle workflow', () => {
 
     // --- Step 11: Verify audit trail ---
     await page.goto('/transactions');
-    // Should have: RECEIVE + ISSUE + MOVE(×2) + DISPOSE = 5 transactions
-    // Move creates 2 transactions (from and to)
+    // Should have: RECEIVE + ISSUE + MOVE + DISPOSE = 4 transactions
+    // Wait for table data to load before counting
     const txRows = page.locator('tbody tr');
+    await txRows.first().waitFor({ state: 'visible' });
     const count = await txRows.count();
     expect(count).toBeGreaterThanOrEqual(4);
 
