@@ -122,4 +122,53 @@ describe('User Management API', () => {
     expect(res.status).toBe(201);
     expect(res.body.role).toBe('viewer');
   });
+
+  test('email is trimmed and lowercased on creation', async () => {
+    const res = await request(app).post('/api/users').send({
+      email: '  SEEMA@test-users.example.com  ',
+      name: 'Seema',
+      role: 'admin',
+    });
+    expect(res.status).toBe(201);
+    expect(res.body.email).toBe('seema@test-users.example.com');
+  });
+
+  test('update user name', async () => {
+    const createRes = await request(app).post('/api/users').send({
+      email: 'nameupdate@test-users.example.com',
+      name: 'Old Name',
+      role: 'viewer',
+    });
+    const userId = createRes.body.id;
+
+    const res = await request(app).put(`/api/users/${userId}`).send({ name: 'New Name' });
+    expect(res.status).toBe(200);
+    expect(res.body.name).toBe('New Name');
+  });
+
+  test('update user with no fields returns 400', async () => {
+    const createRes = await request(app).post('/api/users').send({
+      email: 'noupdate@test-users.example.com',
+      name: 'No Update',
+      role: 'viewer',
+    });
+    const userId = createRes.body.id;
+
+    const res = await request(app).put(`/api/users/${userId}`).send({});
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/No fields to update/);
+  });
+
+  test('update user with invalid role returns 400', async () => {
+    const createRes = await request(app).post('/api/users').send({
+      email: 'badroleup@test-users.example.com',
+      name: 'Bad Role Update',
+      role: 'viewer',
+    });
+    const userId = createRes.body.id;
+
+    const res = await request(app).put(`/api/users/${userId}`).send({ role: 'superadmin' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/Invalid role/);
+  });
 });
