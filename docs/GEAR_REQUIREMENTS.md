@@ -46,6 +46,21 @@ constitutes a requirement has been inlined here, and it is not needed to build G
 
 ## 1. Scope
 
+> **Changed 2026-09-07 — Stash is on hold.** Inventory management is being done in **Shopify**,
+> not the Stash module. Gear must **not** integrate with Stash: no new code may read or write
+> Stash's tables or call its services.
+>
+> What this does and does not change:
+> - The **boundary rule** in §1.1 stands unaltered. Only the name of the system on the other
+>   side of it changes — "Stash inventory" now means "Shopify".
+> - **G6.2 (parts consumed) is deferred**, because its stated mechanism was reading Stash's
+>   inventory transactions. See §7.8.
+> - **§7.3 (promoting Stash's suppliers into the party list) is moot** while Stash is on hold.
+> - Code that **already** couples the two — `commissionAsset`, and the asset reference stamped
+>   on Stash transactions — stays as built and tested. It is not extended.
+> - No Shopify integration is specified here. Nothing in this document requires one, and none
+>   should be built until it is.
+
 **An asset is a valuable physical thing the company needs to track and manage over its
 lifecycle.** Gear is the registry of those things.
 
@@ -325,10 +340,14 @@ As a technician, I want to scan a battery then a robot to record the installatio
 **G6.1 Work orders against any asset · P2**
 As field ops, I want a service history per asset regardless of its type.
 
-**G6.2 Parts consumed come from Stash · P2**
+**G6.2 Parts consumed · Deferred — see §7.8**
 As the business, I want to see what parts a repair consumed without recording them twice.
-*Acceptance:* maintenance **reads** the existing Stash inventory transactions, which already
-carry an asset reference. It must not maintain a parallel parts-consumed log.
+
+**Deferred 2026-09-07.** The acceptance criterion was that maintenance *reads* Stash's
+inventory transactions rather than keeping its own log. With Stash on hold and inventory in
+Shopify, that mechanism no longer exists. The **principle survives and still binds**: whatever
+system holds inventory is the single source of truth for parts consumed, and Gear must not keep
+a parallel parts-consumed log to work around not having the integration.
 
 **G6.3 Component wear by model · P2**
 As an engineer, I want to know how long a blade design lasts.
@@ -427,7 +446,9 @@ value is the no-UI deep link for authenticated users, which doesn't depend on pu
 
 ### 5.6 Blades are inventory
 
-They stay Stash parts with cost layers and reorder points.
+They stay inventory — in Shopify, since Stash is on hold — with cost layers and reorder
+points wherever that inventory lives. The point is that they are quantity-at-location, not
+registry entries.
 
 Two reasons. **A blade cannot carry a durable identifier** — it is a wear part living in dirt
 and rock strikes, and no label survives its own service life, which makes identity unreadable
@@ -545,10 +566,11 @@ Real requirements, deliberately not being built yet. Each has a trigger.
 |---|---|---|
 | 7.1 | **Offline capture and sync.** Deferred: it is the most expensive item here and the least likely to survive contact with how people work; the warehouse and shop have connectivity, which is where the scanning happens. When built it needs a client-supplied idempotency key on queued records, so a retried scan or a re-uploaded photo doesn't post twice — an optional field, easily added later | Field work proves it necessary; or G4.3 ships |
 | 7.2 | **Lifecycle transition rules.** Until they exist, any state may follow any state | State errors become a real data-quality problem |
-| 7.3 | **Promoting Stash's supplier list into the shared party list** (§5.3). Suppliers work today and purchase orders reference them; nothing is currently unanswerable. Recorded so nobody "fixes" it prematurely. Follow §2.4 when the time comes | A question needs suppliers and parties in one list |
+| 7.3 | **Promoting Stash's supplier list into the shared party list** (§5.3). **Moot while Stash is on hold** — recorded in case Stash returns. Follow §2.4 if it does | Stash comes off hold *and* a question needs suppliers and parties in one list |
 | 7.4 | **Joining a truck-as-location to a truck-as-asset** (§5.2) | A real question needs the join |
 | 7.5 | **Per-blade identity** (§5.6) | Warranty or failure traceability against an individual blade |
 | 7.6 | **Manufacturer-scoped serial uniqueness** (§5.1) | The first genuine collision — which will announce itself |
+| 7.8 | **Parts consumed on a maintenance order** (was G6.2). Needs an inventory system to read from. Shopify is where inventory lives now, and no Shopify integration is specified. Whenever it is built, the rule holds: read from the system of record, never keep a parallel log | A Shopify integration is specified, or Stash comes off hold |
 | 7.7 | **Retire an asset instead of deleting it.** Deleting an asset currently deletes its whole event history with it — every asset has a `registered` event from birth, so refusing to delete assets that have events would make every asset undeletable. Accepted while there are no real assets. The registry is meant to be the record of what the company owns, and a history a delete button can erase is not an audit trail. `lifecycle_states` already carries `Retired` and an `is_terminal` flag, which is the mechanism | **Before real assets are registered.** This is the trigger that matters: it is cheap to change while the only assets are test data, and it is a data-loss question afterwards |
 
 ---

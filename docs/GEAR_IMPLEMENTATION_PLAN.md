@@ -319,11 +319,11 @@ changing means doing it twice.
 
 | Phase | Stories | Notes |
 |---|---|---|
-| 7 | G2.4, G2.5 | Label generation and printing. QR for robots/vehicles/bins, DataMatrix for VCUs and small electronics, either for batteries; human-readable serial always printed alongside. Order and abuse a media test batch before any volume run — that is procurement, and it has a lead time |
+| 7 | G2.4, G2.5 | Label generation and printing. QR for robots/vehicles/bins, DataMatrix for VCUs and small electronics, either for batteries; human-readable serial always printed alongside. **Unblocked for local prototyping (2026-09-07):** generate and preview labels with the URL host taken from configuration, so the printed host can change without touching code. §10's "print nothing first" rule is about labels **applied to equipment**, which is what becomes irreversible — generating and previewing them locally is not. Do not apply labels to real equipment, and do not order a volume run, until the durable host exists |
 | 8 | G4.1, G4.2 | Camera scanning with a self-hosted decoder — the native browser barcode API alone fails silently on every iPhone (§6.3). 2D only on the camera path. The global sentinel-prefix listener belongs in `client/src/core/`, not Gear, because Stash needs it equally (G4.2); no timing heuristics |
 | 9 | G3.3, G5.1, G5.2 | `asset_links` as dated edges: `parent_asset_id`, `child_asset_id`, `link_type`, `occurred_at`, `valid_from`, `valid_to` nullable. Overlap enforced in the service layer plus a partial unique index on `child_asset_id WHERE valid_to IS NULL` as the backstop — no exclusion constraints (§6.2). Two-scan flows for locate and link, glove-usable |
-| 10 | G6.1, G6.2, G6.3 | Maintenance orders. Parts consumed are **read** from `inventory_transactions` via the existing `reference_type='ASSET'` / `reference_id` stamp — no parallel log (G6.2). Component wear is per-installation against the model, not per-blade identity (G6.3) |
-| 11 | G4.3, G7.3 | Photograph-and-resolve-later, which needs the idempotency key from §7.1; and promoting Stash's suppliers into `parties` following the §2.4 runbook |
+| 10 | G6.1, G6.3 | Maintenance orders and component wear. **Re-scoped 2026-09-07: G6.2 is out** — its mechanism was reading Stash's inventory transactions, and Stash is on hold with inventory in Shopify (requirements §7.8). Build work orders and a service history that does **not** include parts consumed, and **do not** substitute a parts log of Gear's own; that is the trap G6.2 existed to prevent, and it does not stop being a trap because the integration is missing. Component wear stays per-installation against the model, never per-blade identity (G6.3). **No Gear code may read or write Stash's tables or call its services.** |
+| 11 | G4.3 | Photograph-and-resolve-later, which needs the idempotency key from §7.1. **G7.3 dropped from this phase** — promoting Stash's suppliers into `parties` is moot while Stash is on hold (requirements §7.3) |
 
 G7.2 (put the promotion runbook in `CLAUDE.md`) rides along with Phase 0's `CLAUDE.md` edit.
 G7.3's scaffold (`modules/_template/`) is worth doing whenever someone next adds a module.
@@ -370,8 +370,8 @@ its code is a single route.
 | Phase | Decision | Owner |
 |---|---|---|
 | 0 | ~~Approve CI, CODEOWNERS and branch protection~~ — **approved 2026-09-07**, PR #6 | Nandan |
-| 5 | Provision the label domain and choose the mechanism. **Decided 2026-09-07: the redirect lives outside the app** | Nandan |
-| 7 | Budget and order a label media test batch | Nandan / procurement |
+| 5 | Provision the label domain and choose the mechanism. **Decided 2026-09-07: the redirect lives outside the app.** Deferred by the owner the same day — the near-term goal is a local prototype on one Mac, so infrastructure waits | Nandan, later |
+| 7 | Budget and order a label media test batch. **Deferred with the rest of the infrastructure** — not needed to generate and preview labels locally | Nandan, later |
 | 11 | Nothing — but §7.3's trigger should be confirmed as still unmet before starting it | — |
 
 Inherited and explicitly not Gear's to resolve (requirements §8): which infrastructure the
