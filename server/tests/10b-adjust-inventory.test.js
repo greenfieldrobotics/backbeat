@@ -16,7 +16,7 @@ describe('Adjust Inventory (Story 5.5)', () => {
   test('Negative adjustment: 10 on hand, adjust to 7 — FIFO consumed, audit logged', async () => {
     await receiveInventory({ part, location, supplier, quantity: 10, unitCost: 5.00 });
 
-    const res = await request(app).post('/api/inventory/adjust').send({
+    const res = await request(app).post('/api/stash/inventory/adjust').send({
       part_id: part.id,
       location_id: location.id,
       new_quantity: 7,
@@ -54,7 +54,7 @@ describe('Adjust Inventory (Story 5.5)', () => {
     await receiveInventory({ part, location, supplier, quantity: 5, unitCost: 20.00 });
 
     // Adjust from 10 to 3 (consume 7: all 5 @ $10 + 2 @ $20)
-    const res = await request(app).post('/api/inventory/adjust').send({
+    const res = await request(app).post('/api/stash/inventory/adjust').send({
       part_id: part.id,
       location_id: location.id,
       new_quantity: 3,
@@ -78,7 +78,7 @@ describe('Adjust Inventory (Story 5.5)', () => {
   test('8b-B: Negative adjustment to zero', async () => {
     await receiveInventory({ part, location, supplier, quantity: 5, unitCost: 8.00 });
 
-    const res = await request(app).post('/api/inventory/adjust').send({
+    const res = await request(app).post('/api/stash/inventory/adjust').send({
       part_id: part.id,
       location_id: location.id,
       new_quantity: 0,
@@ -105,7 +105,7 @@ describe('Adjust Inventory (Story 5.5)', () => {
   test('Positive adjustment: 5 on hand, adjust to 8 — new ADJUSTMENT layer created', async () => {
     await receiveInventory({ part, location, supplier, quantity: 5, unitCost: 12.00 });
 
-    const res = await request(app).post('/api/inventory/adjust').send({
+    const res = await request(app).post('/api/stash/inventory/adjust').send({
       part_id: part.id,
       location_id: location.id,
       new_quantity: 8,
@@ -140,7 +140,7 @@ describe('Adjust Inventory (Story 5.5)', () => {
   test('8b-C: Positive adjustment with specified cost', async () => {
     await receiveInventory({ part, location, supplier, quantity: 5, unitCost: 10.00 });
 
-    const res = await request(app).post('/api/inventory/adjust').send({
+    const res = await request(app).post('/api/stash/inventory/adjust').send({
       part_id: part.id,
       location_id: location.id,
       new_quantity: 8,
@@ -163,7 +163,7 @@ describe('Adjust Inventory (Story 5.5)', () => {
     await receiveInventory({ part, location, supplier, quantity: 3, unitCost: 7.00 });
     await receiveInventory({ part, location, supplier, quantity: 3, unitCost: 14.00 });
 
-    const res = await request(app).post('/api/inventory/adjust').send({
+    const res = await request(app).post('/api/stash/inventory/adjust').send({
       part_id: part.id,
       location_id: location.id,
       new_quantity: 8,
@@ -179,7 +179,7 @@ describe('Adjust Inventory (Story 5.5)', () => {
 
   test('8b-E: Positive adjustment from zero inventory (with unit_cost)', async () => {
     // No existing inventory — need to provide unit_cost
-    const res = await request(app).post('/api/inventory/adjust').send({
+    const res = await request(app).post('/api/stash/inventory/adjust').send({
       part_id: part.id,
       location_id: location.id,
       new_quantity: 5,
@@ -210,7 +210,7 @@ describe('Adjust Inventory (Story 5.5)', () => {
   test('Count equals system — delta 0, no DB changes', async () => {
     await receiveInventory({ part, location, supplier, quantity: 10, unitCost: 5.00 });
 
-    const res = await request(app).post('/api/inventory/adjust').send({
+    const res = await request(app).post('/api/stash/inventory/adjust').send({
       part_id: part.id,
       location_id: location.id,
       new_quantity: 10,
@@ -232,7 +232,7 @@ describe('Adjust Inventory (Story 5.5)', () => {
   // --- Validation ---
 
   test('Missing part_id returns 400', async () => {
-    const res = await request(app).post('/api/inventory/adjust').send({
+    const res = await request(app).post('/api/stash/inventory/adjust').send({
       location_id: location.id,
       new_quantity: 5,
       reason: 'Physical count',
@@ -241,7 +241,7 @@ describe('Adjust Inventory (Story 5.5)', () => {
   });
 
   test('Missing location_id returns 400', async () => {
-    const res = await request(app).post('/api/inventory/adjust').send({
+    const res = await request(app).post('/api/stash/inventory/adjust').send({
       part_id: part.id,
       new_quantity: 5,
       reason: 'Physical count',
@@ -250,7 +250,7 @@ describe('Adjust Inventory (Story 5.5)', () => {
   });
 
   test('Missing new_quantity returns 400', async () => {
-    const res = await request(app).post('/api/inventory/adjust').send({
+    const res = await request(app).post('/api/stash/inventory/adjust').send({
       part_id: part.id,
       location_id: location.id,
       reason: 'Physical count',
@@ -259,7 +259,7 @@ describe('Adjust Inventory (Story 5.5)', () => {
   });
 
   test('Missing reason returns 400', async () => {
-    const res = await request(app).post('/api/inventory/adjust').send({
+    const res = await request(app).post('/api/stash/inventory/adjust').send({
       part_id: part.id,
       location_id: location.id,
       new_quantity: 5,
@@ -269,7 +269,7 @@ describe('Adjust Inventory (Story 5.5)', () => {
   });
 
   test('Negative new_quantity returns 400', async () => {
-    const res = await request(app).post('/api/inventory/adjust').send({
+    const res = await request(app).post('/api/stash/inventory/adjust').send({
       part_id: part.id,
       location_id: location.id,
       new_quantity: -1,
@@ -279,7 +279,7 @@ describe('Adjust Inventory (Story 5.5)', () => {
   });
 
   test('Non-existent part returns 404', async () => {
-    const res = await request(app).post('/api/inventory/adjust').send({
+    const res = await request(app).post('/api/stash/inventory/adjust').send({
       part_id: 99999,
       location_id: location.id,
       new_quantity: 5,
@@ -289,7 +289,7 @@ describe('Adjust Inventory (Story 5.5)', () => {
   });
 
   test('Non-existent location returns 404', async () => {
-    const res = await request(app).post('/api/inventory/adjust').send({
+    const res = await request(app).post('/api/stash/inventory/adjust').send({
       part_id: part.id,
       location_id: 99999,
       new_quantity: 5,
@@ -299,7 +299,7 @@ describe('Adjust Inventory (Story 5.5)', () => {
   });
 
   test('Positive adjustment without cost and no existing layers returns 400', async () => {
-    const res = await request(app).post('/api/inventory/adjust').send({
+    const res = await request(app).post('/api/stash/inventory/adjust').send({
       part_id: part.id,
       location_id: location.id,
       new_quantity: 5,
@@ -314,7 +314,7 @@ describe('Adjust Inventory (Story 5.5)', () => {
   test('Negative adjustment audit trail has ADJUSTMENT type and reason', async () => {
     await receiveInventory({ part, location, supplier, quantity: 10, unitCost: 5.00 });
 
-    await request(app).post('/api/inventory/adjust').send({
+    await request(app).post('/api/stash/inventory/adjust').send({
       part_id: part.id,
       location_id: location.id,
       new_quantity: 7,
@@ -331,7 +331,7 @@ describe('Adjust Inventory (Story 5.5)', () => {
   test('Positive adjustment audit trail has ADJUSTMENT type and reason', async () => {
     await receiveInventory({ part, location, supplier, quantity: 5, unitCost: 10.00 });
 
-    await request(app).post('/api/inventory/adjust').send({
+    await request(app).post('/api/stash/inventory/adjust').send({
       part_id: part.id,
       location_id: location.id,
       new_quantity: 8,

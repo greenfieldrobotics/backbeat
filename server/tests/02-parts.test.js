@@ -9,7 +9,7 @@ describe('Parts Catalog', () => {
   // --- Happy Path ---
 
   test('Create a part with all fields', async () => {
-    const res = await request(app).post('/api/parts').send({
+    const res = await request(app).post('/api/stash/parts').send({
       part_number: 'PN-001',
       description: 'Widget A',
       unit_of_measure: 'FT',
@@ -36,7 +36,7 @@ describe('Parts Catalog', () => {
     await createPart({ part_number: 'AAA-001' });
     await createPart({ part_number: 'MMM-500' });
 
-    const res = await request(app).get('/api/parts');
+    const res = await request(app).get('/api/stash/parts');
     expect(res.status).toBe(200);
     expect(res.body.length).toBe(3);
     expect(res.body[0].part_number).toBe('AAA-001');
@@ -51,7 +51,7 @@ describe('Parts Catalog', () => {
     // Small delay to ensure timestamp changes
     await new Promise(r => setTimeout(r, 50));
 
-    const res = await request(app).put(`/api/parts/${part.id}`).send({
+    const res = await request(app).put(`/api/stash/parts/${part.id}`).send({
       description: 'Updated description',
       classification: 'Electrical',
     });
@@ -63,23 +63,23 @@ describe('Parts Catalog', () => {
 
   test('Delete a part with no inventory', async () => {
     const part = await createPart({ part_number: 'DEL-001' });
-    const res = await request(app).delete(`/api/parts/${part.id}`);
+    const res = await request(app).delete(`/api/stash/parts/${part.id}`);
     expect(res.status).toBe(204);
 
-    const getRes = await request(app).get(`/api/parts/${part.id}`);
+    const getRes = await request(app).get(`/api/stash/parts/${part.id}`);
     expect(getRes.status).toBe(404);
   });
 
   // --- Validation & Edge Cases ---
 
   test('Missing part_number returns 400', async () => {
-    const res = await request(app).post('/api/parts').send({ description: 'No PN' });
+    const res = await request(app).post('/api/stash/parts').send({ description: 'No PN' });
     expect(res.status).toBe(400);
   });
 
   test('Duplicate part_number returns 409', async () => {
     await createPart({ part_number: 'DUP-001' });
-    const res = await request(app).post('/api/parts').send({ part_number: 'DUP-001' });
+    const res = await request(app).post('/api/stash/parts').send({ part_number: 'DUP-001' });
     expect(res.status).toBe(409);
   });
 
@@ -87,7 +87,7 @@ describe('Parts Catalog', () => {
     await createPart({ part_number: 'ORIG-A' });
     const partB = await createPart({ part_number: 'ORIG-B' });
 
-    const res = await request(app).put(`/api/parts/${partB.id}`).send({ part_number: 'ORIG-A' });
+    const res = await request(app).put(`/api/stash/parts/${partB.id}`).send({ part_number: 'ORIG-A' });
     expect(res.status).toBe(409);
   });
 
@@ -97,29 +97,29 @@ describe('Parts Catalog', () => {
     const supplier = await createSupplier();
     await receiveInventory({ part, location, supplier, quantity: 5, unitCost: 10 });
 
-    const res = await request(app).delete(`/api/parts/${part.id}`);
+    const res = await request(app).delete(`/api/stash/parts/${part.id}`);
     expect(res.status).toBe(409);
     expect(res.body.error).toMatch(/inventory/i);
   });
 
   test('Get non-existent part returns 404', async () => {
-    const res = await request(app).get('/api/parts/99999');
+    const res = await request(app).get('/api/stash/parts/99999');
     expect(res.status).toBe(404);
   });
 
   test('Update non-existent part returns 404', async () => {
-    const res = await request(app).put('/api/parts/99999').send({ description: 'Nope' });
+    const res = await request(app).put('/api/stash/parts/99999').send({ description: 'Nope' });
     expect(res.status).toBe(404);
   });
 
   test('Update with no fields returns 400', async () => {
     const part = await createPart({ part_number: 'EMPTY-UPD' });
-    const res = await request(app).put(`/api/parts/${part.id}`).send({});
+    const res = await request(app).put(`/api/stash/parts/${part.id}`).send({});
     expect(res.status).toBe(400);
   });
 
   test('Default values when only part_number is provided', async () => {
-    const res = await request(app).post('/api/parts').send({ part_number: 'DEFAULTS-001' });
+    const res = await request(app).post('/api/stash/parts').send({ part_number: 'DEFAULTS-001' });
     expect(res.status).toBe(201);
     expect(res.body.unit_of_measure).toBe('EA');
     expect(res.body.classification).toBe('General');
@@ -133,7 +133,7 @@ describe('Parts Catalog', () => {
     await createPart({ part_number: 'BOLT-200' });
     await createPart({ part_number: 'NUT-300' });
 
-    const res = await request(app).get('/api/parts?search=BOLT');
+    const res = await request(app).get('/api/stash/parts?search=BOLT');
     expect(res.status).toBe(200);
     expect(res.body.length).toBe(2);
     expect(res.body.every(p => p.part_number.includes('BOLT'))).toBe(true);
@@ -143,7 +143,7 @@ describe('Parts Catalog', () => {
     await createPart({ part_number: 'DESC-1', description: 'Hydraulic pump' });
     await createPart({ part_number: 'DESC-2', description: 'Electric motor' });
 
-    const res = await request(app).get('/api/parts?search=hydraulic');
+    const res = await request(app).get('/api/stash/parts?search=hydraulic');
     expect(res.status).toBe(200);
     expect(res.body.length).toBe(1);
     expect(res.body[0].part_number).toBe('DESC-1');
@@ -153,7 +153,7 @@ describe('Parts Catalog', () => {
     await createPart({ part_number: 'MFG-1', manufacturer: 'Acme Corp' });
     await createPart({ part_number: 'MFG-2', manufacturer: 'Beta Inc' });
 
-    const res = await request(app).get('/api/parts?search=Acme');
+    const res = await request(app).get('/api/stash/parts?search=Acme');
     expect(res.status).toBe(200);
     expect(res.body.length).toBe(1);
     expect(res.body[0].part_number).toBe('MFG-1');
@@ -164,7 +164,7 @@ describe('Parts Catalog', () => {
     await createPart({ part_number: 'CLS-2', classification: 'Mechanical' });
     await createPart({ part_number: 'CLS-3', classification: 'Electrical' });
 
-    const res = await request(app).get('/api/parts?classification=Electrical');
+    const res = await request(app).get('/api/stash/parts?classification=Electrical');
     expect(res.status).toBe(200);
     expect(res.body.length).toBe(2);
     expect(res.body.every(p => p.classification === 'Electrical')).toBe(true);
@@ -175,7 +175,7 @@ describe('Parts Catalog', () => {
     await createPart({ part_number: 'COMBO-2', classification: 'Mechanical', description: 'Motor' });
     await createPart({ part_number: 'COMBO-3', classification: 'Electrical', description: 'Pump' });
 
-    const res = await request(app).get('/api/parts?search=Motor&classification=Electrical');
+    const res = await request(app).get('/api/stash/parts?search=Motor&classification=Electrical');
     expect(res.status).toBe(200);
     expect(res.body.length).toBe(1);
     expect(res.body[0].part_number).toBe('COMBO-1');

@@ -19,7 +19,7 @@ describe('Inventory Summary Consistency', () => {
 
   test('Consistency after issue', async () => {
     await receiveInventory({ part, location: locA, supplier, quantity: 10, unitCost: 5.00 });
-    await request(app).post('/api/inventory/issue').send({
+    await request(app).post('/api/stash/inventory/issue').send({
       part_id: part.id,
       location_id: locA.id,
       quantity: 3,
@@ -29,7 +29,7 @@ describe('Inventory Summary Consistency', () => {
 
   test('Consistency after move (both locations)', async () => {
     await receiveInventory({ part, location: locA, supplier, quantity: 10, unitCost: 5.00 });
-    await request(app).post('/api/inventory/move').send({
+    await request(app).post('/api/stash/inventory/move').send({
       part_id: part.id,
       from_location_id: locA.id,
       to_location_id: locB.id,
@@ -41,7 +41,7 @@ describe('Inventory Summary Consistency', () => {
 
   test('Consistency after dispose', async () => {
     await receiveInventory({ part, location: locA, supplier, quantity: 10, unitCost: 5.00 });
-    await request(app).post('/api/inventory/dispose').send({
+    await request(app).post('/api/stash/inventory/dispose').send({
       part_id: part.id,
       location_id: locA.id,
       quantity: 2,
@@ -56,7 +56,7 @@ describe('Inventory Summary Consistency', () => {
     await receiveInventory({ part, location: locA, supplier, quantity: 5, unitCost: 20.00 });
 
     // Move 7 from A to B
-    await request(app).post('/api/inventory/move').send({
+    await request(app).post('/api/stash/inventory/move').send({
       part_id: part.id,
       from_location_id: locA.id,
       to_location_id: locB.id,
@@ -64,7 +64,7 @@ describe('Inventory Summary Consistency', () => {
     });
 
     // Issue 6 from B
-    await request(app).post('/api/inventory/issue').send({
+    await request(app).post('/api/stash/inventory/issue').send({
       part_id: part.id,
       location_id: locB.id,
       quantity: 6,

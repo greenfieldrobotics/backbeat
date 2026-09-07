@@ -32,7 +32,7 @@ describe('Audit Trail / Transactions', () => {
   test('ISSUE creates audit record with target_ref and reason', async () => {
     await receiveInventory({ part, location: locA, supplier, quantity: 10, unitCost: 5.00 });
 
-    await request(app).post('/api/inventory/issue').send({
+    await request(app).post('/api/stash/inventory/issue').send({
       part_id: part.id,
       location_id: locA.id,
       quantity: 3,
@@ -53,7 +53,7 @@ describe('Audit Trail / Transactions', () => {
   test('MOVE creates audit record with to_location_id', async () => {
     await receiveInventory({ part, location: locA, supplier, quantity: 10, unitCost: 5.00 });
 
-    await request(app).post('/api/inventory/move').send({
+    await request(app).post('/api/stash/inventory/move').send({
       part_id: part.id,
       from_location_id: locA.id,
       to_location_id: locB.id,
@@ -73,7 +73,7 @@ describe('Audit Trail / Transactions', () => {
   test('DISPOSE creates audit record with reason', async () => {
     await receiveInventory({ part, location: locA, supplier, quantity: 10, unitCost: 5.00 });
 
-    await request(app).post('/api/inventory/dispose').send({
+    await request(app).post('/api/stash/inventory/dispose').send({
       part_id: part.id,
       location_id: locA.id,
       quantity: 2,
@@ -96,7 +96,7 @@ describe('Audit Trail / Transactions', () => {
     await receiveInventory({ part, location: locA, supplier, quantity: 10, unitCost: 5.00 });
     await receiveInventory({ part: part2, location: locA, supplier, quantity: 5, unitCost: 8.00 });
 
-    const res = await request(app).get(`/api/inventory/transactions?part_id=${part.id}`);
+    const res = await request(app).get(`/api/stash/inventory/transactions?part_id=${part.id}`);
     expect(res.status).toBe(200);
     expect(res.body.every(t => t.part_id === part.id)).toBe(true);
   });
@@ -105,14 +105,14 @@ describe('Audit Trail / Transactions', () => {
     await receiveInventory({ part, location: locA, supplier, quantity: 10, unitCost: 5.00 });
     await receiveInventory({ part, location: locB, supplier, quantity: 5, unitCost: 8.00 });
 
-    const res = await request(app).get(`/api/inventory/transactions?location_id=${locA.id}`);
+    const res = await request(app).get(`/api/stash/inventory/transactions?location_id=${locA.id}`);
     expect(res.status).toBe(200);
     expect(res.body.every(t => t.location_id === locA.id)).toBe(true);
   });
 
   test('Default limit is 100', async () => {
     // Just verify the endpoint responds (we don't need 100+ records)
-    const res = await request(app).get('/api/inventory/transactions');
+    const res = await request(app).get('/api/stash/inventory/transactions');
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body)).toBe(true);
   });
@@ -121,7 +121,7 @@ describe('Audit Trail / Transactions', () => {
     await receiveInventory({ part, location: locA, supplier, quantity: 10, unitCost: 5.00 });
     await receiveInventory({ part, location: locA, supplier, quantity: 5, unitCost: 8.00 });
 
-    const res = await request(app).get('/api/inventory/transactions?limit=1');
+    const res = await request(app).get('/api/stash/inventory/transactions?limit=1');
     expect(res.status).toBe(200);
     expect(res.body.length).toBe(1);
   });
@@ -132,7 +132,7 @@ describe('Audit Trail / Transactions', () => {
     await new Promise(r => setTimeout(r, 50));
     await receiveInventory({ part, location: locA, supplier, quantity: 5, unitCost: 8.00 });
 
-    const res = await request(app).get('/api/inventory/transactions');
+    const res = await request(app).get('/api/stash/inventory/transactions');
     expect(res.status).toBe(200);
     if (res.body.length >= 2) {
       const first = new Date(res.body[0].created_at).getTime();
@@ -144,12 +144,12 @@ describe('Audit Trail / Transactions', () => {
   // --- Immutability ---
 
   test('No PUT endpoint for transactions', async () => {
-    const res = await request(app).put('/api/inventory/transactions/1').send({ quantity: 999 });
+    const res = await request(app).put('/api/stash/inventory/transactions/1').send({ quantity: 999 });
     expect(res.status).toBe(404);
   });
 
   test('No DELETE endpoint for transactions', async () => {
-    const res = await request(app).delete('/api/inventory/transactions/1');
+    const res = await request(app).delete('/api/stash/inventory/transactions/1');
     expect(res.status).toBe(404);
   });
 });

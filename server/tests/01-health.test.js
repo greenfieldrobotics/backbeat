@@ -7,7 +7,8 @@ describe('Health Check', () => {
     expect(res.status).toBe(200);
     expect(res.body).toEqual({
       status: 'ok',
-      module: 'Stash',
+      service: 'Backbeat',
+      modules: ['Stash', 'Gear'],
       version: '0.1.0',
     });
   });

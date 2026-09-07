@@ -84,6 +84,24 @@ body {
   margin-top: 6px;
 }
 
+.nav-scroll {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.nav-section {
+  margin-bottom: 8px;
+}
+
+.nav-section-title {
+  padding: 10px 20px 4px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--color-yellow);
+}
+
 .sidebar ul { list-style: none; }
 
 .sidebar li a {

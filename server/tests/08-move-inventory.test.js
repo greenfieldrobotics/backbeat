@@ -17,7 +17,7 @@ describe('Move Inventory', () => {
   test('Move inventory between locations', async () => {
     await receiveInventory({ part, location: locA, supplier, quantity: 10, unitCost: 5.00 });
 
-    const res = await request(app).post('/api/inventory/move').send({
+    const res = await request(app).post('/api/stash/inventory/move').send({
       part_id: part.id,
       from_location_id: locA.id,
       to_location_id: locB.id,
@@ -36,7 +36,7 @@ describe('Move Inventory', () => {
   test('FIFO layers transferred correctly', async () => {
     await receiveInventory({ part, location: locA, supplier, quantity: 10, unitCost: 5.00 });
 
-    await request(app).post('/api/inventory/move').send({
+    await request(app).post('/api/stash/inventory/move').send({
       part_id: part.id,
       from_location_id: locA.id,
       to_location_id: locB.id,
@@ -62,7 +62,7 @@ describe('Move Inventory', () => {
   test('Audit trail with MOVE type', async () => {
     await receiveInventory({ part, location: locA, supplier, quantity: 10, unitCost: 5.00 });
 
-    await request(app).post('/api/inventory/move').send({
+    await request(app).post('/api/stash/inventory/move').send({
       part_id: part.id,
       from_location_id: locA.id,
       to_location_id: locB.id,
@@ -82,7 +82,7 @@ describe('Move Inventory', () => {
   test('7A: Move splits a single FIFO layer', async () => {
     await receiveInventory({ part, location: locA, supplier, quantity: 10, unitCost: 5.00 });
 
-    await request(app).post('/api/inventory/move').send({
+    await request(app).post('/api/stash/inventory/move').send({
       part_id: part.id,
       from_location_id: locA.id,
       to_location_id: locB.id,
@@ -111,7 +111,7 @@ describe('Move Inventory', () => {
     await receiveInventory({ part, location: locA, supplier, quantity: 5, unitCost: 10.00 });
     await receiveInventory({ part, location: locA, supplier, quantity: 5, unitCost: 20.00 });
 
-    const res = await request(app).post('/api/inventory/move').send({
+    const res = await request(app).post('/api/stash/inventory/move').send({
       part_id: part.id,
       from_location_id: locA.id,
       to_location_id: locB.id,
@@ -146,7 +146,7 @@ describe('Move Inventory', () => {
     await receiveInventory({ part, location: locA, supplier, quantity: 10, unitCost: 5.00 });
     await receiveInventory({ part, location: locB, supplier, quantity: 5, unitCost: 8.00 });
 
-    await request(app).post('/api/inventory/move').send({
+    await request(app).post('/api/stash/inventory/move').send({
       part_id: part.id,
       from_location_id: locA.id,
       to_location_id: locB.id,
@@ -171,7 +171,7 @@ describe('Move Inventory', () => {
   // --- Validation ---
 
   test('Same source and destination returns 400', async () => {
-    const res = await request(app).post('/api/inventory/move').send({
+    const res = await request(app).post('/api/stash/inventory/move').send({
       part_id: part.id,
       from_location_id: locA.id,
       to_location_id: locA.id,
@@ -183,7 +183,7 @@ describe('Move Inventory', () => {
   test('Insufficient inventory returns 400', async () => {
     await receiveInventory({ part, location: locA, supplier, quantity: 5, unitCost: 10.00 });
 
-    const res = await request(app).post('/api/inventory/move').send({
+    const res = await request(app).post('/api/stash/inventory/move').send({
       part_id: part.id,
       from_location_id: locA.id,
       to_location_id: locB.id,
@@ -194,7 +194,7 @@ describe('Move Inventory', () => {
   });
 
   test('Non-existent part returns 404', async () => {
-    const res = await request(app).post('/api/inventory/move').send({
+    const res = await request(app).post('/api/stash/inventory/move').send({
       part_id: 99999,
       from_location_id: locA.id,
       to_location_id: locB.id,
@@ -204,7 +204,7 @@ describe('Move Inventory', () => {
   });
 
   test('Zero quantity returns 400', async () => {
-    const res = await request(app).post('/api/inventory/move').send({
+    const res = await request(app).post('/api/stash/inventory/move').send({
       part_id: part.id,
       from_location_id: locA.id,
       to_location_id: locB.id,

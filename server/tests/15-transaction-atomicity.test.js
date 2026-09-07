@@ -15,7 +15,7 @@ describe('Transaction Atomicity', () => {
     await receiveInventory({ part, location, supplier, quantity: 5, unitCost: 10.00 });
 
     // Try to issue more than available
-    const res = await request(app).post('/api/inventory/issue').send({
+    const res = await request(app).post('/api/stash/inventory/issue').send({
       part_id: part.id,
       location_id: location.id,
       quantity: 100,
@@ -48,7 +48,7 @@ describe('Transaction Atomicity', () => {
     const locB = await createLocation({ name: 'Atom Loc B', type: 'Regional Site' });
     await receiveInventory({ part, location, supplier, quantity: 5, unitCost: 10.00 });
 
-    const res = await request(app).post('/api/inventory/move').send({
+    const res = await request(app).post('/api/stash/inventory/move').send({
       part_id: part.id,
       from_location_id: location.id,
       to_location_id: locB.id,
@@ -81,7 +81,7 @@ describe('Transaction Atomicity', () => {
   test('Receive with invalid line_item_id rolls back entire batch', async () => {
     const partB = await createPart({ part_number: 'ATOM-PART-B' });
 
-    const poRes = await request(app).post('/api/purchase-orders').send({
+    const poRes = await request(app).post('/api/stash/purchase-orders').send({
       supplier_id: supplier.id,
       line_items: [
         { part_id: part.id, quantity_ordered: 10, unit_cost: 5.00 },
@@ -89,10 +89,10 @@ describe('Transaction Atomicity', () => {
       ],
     });
     const po = poRes.body;
-    await request(app).put(`/api/purchase-orders/${po.id}/status`).send({ status: 'Ordered' });
+    await request(app).put(`/api/stash/purchase-orders/${po.id}/status`).send({ status: 'Ordered' });
 
     // Try to receive with one valid and one invalid line_item_id
-    const res = await request(app).post(`/api/purchase-orders/${po.id}/receive`).send({
+    const res = await request(app).post(`/api/stash/purchase-orders/${po.id}/receive`).send({
       location_id: location.id,
       items: [
         { line_item_id: po.line_items[0].id, quantity_received: 5 },
