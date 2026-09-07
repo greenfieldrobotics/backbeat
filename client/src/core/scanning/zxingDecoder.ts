@@ -34,3 +34,21 @@ export function createCameraBarcodeDetector(): BarcodeDetector {
   ensureWasmConfigured();
   return new BarcodeDetector({ formats: [...CAMERA_FORMATS] });
 }
+
+// Photograph-and-resolve-later (Phase 11, G4.3) decodes a still image instead of a
+// live camera frame — deliberately the SAME decoder as createCameraBarcodeDetector()
+// above, not a second one: `BarcodeDetector.detect()` accepts an ImageBitmap exactly
+// as it accepts a <video> element, so nothing about the self-hosted wasm setup or the
+// 2D-only format restriction changes for this path. Returns the first decoded value,
+// or null if the image contains no readable QR/DataMatrix code — a normal outcome (a
+// blurry or mis-framed photo), not a thrown error.
+export async function decodeStillImage(file: Blob): Promise<string | null> {
+  const detector = createCameraBarcodeDetector();
+  const bitmap = await createImageBitmap(file);
+  try {
+    const barcodes = await detector.detect(bitmap);
+    return barcodes.length > 0 ? barcodes[0].rawValue : null;
+  } finally {
+    bitmap.close();
+  }
+}

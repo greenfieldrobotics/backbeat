@@ -97,6 +97,19 @@ export async function createGearTables(pool) {
     CREATE INDEX IF NOT EXISTS idx_asset_events_asset_id ON asset_events(asset_id);
     CREATE INDEX IF NOT EXISTS idx_asset_events_occurred_at ON asset_events(occurred_at);
 
+    -- Idempotency for photo-resolved scans (Phase 11, G4.3, §7.1) — a satellite
+    -- table, not a column on asset_events (one of the four spine tables CLAUDE.md
+    -- protects). client_key is the row's own identity: the whole point is "does a
+    -- row for this key already exist", which a TEXT PRIMARY KEY expresses directly,
+    -- without the nullable-unique-column-plus-partial-index dance a spine column
+    -- would need. A submission with no client_key writes no row here at all — there
+    -- is nothing to dedup against — so "the key is nullable" (§7.1) is true from the
+    -- API's point of view without this table ever storing a null.
+    CREATE TABLE IF NOT EXISTS asset_event_photo_keys (
+      client_key TEXT PRIMARY KEY,
+      asset_event_id INTEGER NOT NULL REFERENCES asset_events(id)
+    );
+
     -- Time-bounded parent/child edges between assets (G5.1, G5.2) — dated, never a
     -- column on either asset, because batteries and VCUs move and a column only ever
     -- holds the current value. One relationship type covers battery-in-robot,
@@ -295,6 +308,15 @@ export async function createGearTables(pool) {
         ALTER TABLE assets ADD COLUMN attributes JSONB;
       END IF;
     END $$;
+
+    -- Widen the event_type vocabulary for photo-resolved scans (Phase 11, G4.3).
+    -- Drop-and-recreate rather than a guarded ADD: a CHECK constraint has no
+    -- "add one more allowed value" form, and re-running this against a database
+    -- that already has the new list is a no-op, same as everywhere else in this
+    -- file that must stay safe to run against a table from any point in its history.
+    ALTER TABLE asset_events DROP CONSTRAINT IF EXISTS asset_events_event_type_check;
+    ALTER TABLE asset_events ADD CONSTRAINT asset_events_event_type_check
+      CHECK (event_type IN ('registered', 'moved', 'custody_changed', 'state_changed', 'note', 'photo_scan'));
   `);
 
   // Seed the starting lifecycle states — same four values as the existing

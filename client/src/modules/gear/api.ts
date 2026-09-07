@@ -5,7 +5,7 @@ import { apiRequest, type ApiResult } from '../../core/httpClient';
 import type {
   Asset, AssetType, LifecycleState, AssetEvent, AssetInput, AssetLink, AssetLinkInput,
   AssetModel, MaintenanceOrder, MaintenanceOrderInput, ComponentInstallation, ComponentInstallationInput,
-  AssetLabel, LabelBatchResult, LabelSymbology, AssetTypeLabelSetting,
+  AssetLabel, LabelBatchResult, LabelSymbology, AssetTypeLabelSetting, PhotoScanInput, PhotoScanResult,
 } from './types';
 
 export const gearApi = {
@@ -104,4 +104,9 @@ export const gearApi = {
       method: 'PUT',
       body: JSON.stringify({ default_symbology }),
     }),
+
+  // Photograph-and-resolve-later (Phase 11, G4.3). 200 with duplicate:true if
+  // client_key had already been submitted — a no-op, not a failure.
+  resolvePhotoScan: (data: PhotoScanInput): Promise<ApiResult<PhotoScanResult>> =>
+    apiRequest('/gear/photo-scans', { method: 'POST', body: JSON.stringify(data) }),
 };

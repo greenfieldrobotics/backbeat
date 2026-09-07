@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import AssetsPage from './pages/AssetsPage';
 import AssetLookupPage from './pages/AssetLookupPage';
 import ScanPage from './pages/ScanPage';
+import PhotoResolvePage from './pages/PhotoResolvePage';
 import LocatePage from './pages/LocatePage';
 import LinkPage from './pages/LinkPage';
 import MaintenancePage from './pages/MaintenancePage';
@@ -34,6 +35,7 @@ const gearModule: GearModule = {
   nav: [
     { to: '/gear/assets', label: 'Assets' },
     { to: '/gear/scan', label: 'Scan' },
+    { to: '/gear/photo-resolve', label: 'Resolve Photo' },
     { to: '/gear/locate', label: 'Locate' },
     { to: '/gear/link', label: 'Link' },
     { to: '/gear/maintenance', label: 'Maintenance' },
@@ -42,6 +44,7 @@ const gearModule: GearModule = {
   routes: [
     { path: '/gear/assets', element: <AssetsPage /> },
     { path: '/gear/scan', element: <ScanPage /> },
+    { path: '/gear/photo-resolve', element: <PhotoResolvePage /> },
     { path: '/gear/locate', element: <LocatePage /> },
     { path: '/gear/link', element: <LinkPage /> },
     { path: '/gear/maintenance', element: <MaintenancePage /> },
