@@ -4,6 +4,7 @@ import LoginPage from './core/pages/LoginPage';
 import LocationsPage from './core/pages/LocationsPage';
 import UsersPage from './core/pages/UsersPage';
 import { modules } from './modules/registry';
+import GlobalScanListener from './core/scanning/GlobalScanListener';
 import './App.css';
 
 function AppShell() {
@@ -23,6 +24,7 @@ function AppShell() {
 
   return (
     <div className="app">
+      <GlobalScanListener />
       <nav className="sidebar">
         <div className="logo">
           <h2>Backbeat</h2>

@@ -24,4 +24,21 @@ export default defineConfig({
       },
     },
   },
+  // `vite preview` serves the built dist/ verbatim, which is what needs checking for
+  // any runtime request to a third-party origin (§6.3) — the same proxy as dev so it
+  // can be checked against a real backend without a second reverse proxy.
+  preview: {
+    host: true,
+    port: 4173,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+      },
+      '/auth': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+      },
+    },
+  },
 })
