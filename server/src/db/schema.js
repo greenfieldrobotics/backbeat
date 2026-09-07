@@ -12,6 +12,7 @@
 
 import { createStashTables } from '../modules/stash/schema.js';
 import { createGearTables } from '../modules/gear/schema.js';
+import { createPartyTables } from '../core/party/schema.js';
 
 // Shared/core tables — owned by no single feature module and referenced across modules.
 async function createCoreTables(pool) {
@@ -66,6 +67,7 @@ async function createCoreTables(pool) {
 export async function initializeDatabase(pool) {
   // Order matters: core tables first (modules reference them via foreign keys).
   await createCoreTables(pool);
+  await createPartyTables(pool);
   await createStashTables(pool);
   await createGearTables(pool);
   return pool;

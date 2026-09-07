@@ -10,12 +10,16 @@ import { pingDatabase } from './core/health/healthService.js';
 import authRoutes from './core/auth/authRoutes.js';
 import usersRouter from './core/users/routes.js';
 import locationsRouter from './core/locations/routes.js';
+import partiesRouter from './core/party/routes.js';
 import dashboardRouter from './core/dashboard/routes.js';
 import partsRouter from './modules/stash/routes/parts.js';
 import suppliersRouter from './modules/stash/routes/suppliers.js';
 import purchaseOrdersRouter from './modules/stash/routes/purchaseOrders.js';
 import inventoryRouter from './modules/stash/routes/inventory.js';
 import assetsRouter from './modules/gear/routes/assets.js';
+import assetTypesRouter from './modules/gear/routes/assetTypes.js';
+import lifecycleStatesRouter from './modules/gear/routes/lifecycleStates.js';
+import assetModelsRouter from './modules/gear/routes/assetModels.js';
 import workflowsRouter from './workflows/routes.js';
 
 const app = express();
@@ -65,6 +69,7 @@ app.use('/api', requireAuth);
 // Shared / core API routes (not module-specific — used across modules)
 app.use('/api/users', usersRouter);
 app.use('/api/locations', locationsRouter);
+app.use('/api/parties', partiesRouter);
 app.use('/api/dashboard', dashboardRouter);
 
 // Stash module API routes (namespaced under /api/stash)
@@ -75,6 +80,9 @@ app.use('/api/stash/inventory', inventoryRouter);
 
 // Gear module API routes (namespaced under /api/gear)
 app.use('/api/gear/assets', assetsRouter);
+app.use('/api/gear/asset-types', assetTypesRouter);
+app.use('/api/gear/lifecycle-states', lifecycleStatesRouter);
+app.use('/api/gear/asset-models', assetModelsRouter);
 
 // Cross-module workflows (operations that span more than one module)
 app.use('/api/workflows', workflowsRouter);
