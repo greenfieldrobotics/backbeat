@@ -65,11 +65,39 @@ Log in with your Claude Max account when prompted (first time only).
 
 | Command | What it does |
 |---|---|
-| `./scripts/dev.sh` | Start everything, then open Claude Code |
+| `./scripts/dev.sh` | Start everything, then open Claude Code with no permission prompts |
+| `./scripts/dev.sh --safe` | Same, but with normal permission prompts |
 | `./scripts/dev.sh --no-claude` | Start the stack only, no Claude session |
 | `./scripts/dev.sh --shell` | Open a plain bash shell instead of Claude |
 | `./scripts/dev.sh --rebuild` | Rebuild the image first (after Dockerfile changes) |
 | `./scripts/dev.sh --help` | Show usage |
+
+### No permission prompts ("yolo mode")
+
+By default the script starts Claude with `--dangerously-skip-permissions`, so it
+edits files, runs commands and installs packages inside the container without
+stopping to ask. That is the point of the sandbox.
+
+Two details make this work, and they are easy to trip over if you launch Claude
+by hand instead of via the script:
+
+- The container runs as **root**, and Claude refuses `--dangerously-skip-permissions`
+  as root unless `IS_SANDBOX=1` is also set. Without it you get:
+  `--dangerously-skip-permissions cannot be used with root/sudo privileges`.
+- The full command is therefore:
+
+```bash
+docker compose exec -w /app -e IS_SANDBOX=1 backbeat claude --dangerously-skip-permissions
+```
+
+Use `./scripts/dev.sh --safe` when you would rather approve each action.
+
+**What this does and does not contain.** Prompt-free Claude cannot touch anything
+on your Mac outside the project — no home directory, no SSH keys, no other repos.
+But `/app` is a live bind mount of the real project folder, so file edits and git
+history are your actual files, and `GITHUB_TOKEN` from `.env` is present in the
+container, so pushes to GitHub are possible. Commit often, and keep work on a
+branch.
 
 ### When you're done
 
@@ -90,8 +118,8 @@ The script is a convenience wrapper. The equivalent by hand, in two terminals:
 docker compose up
 
 # Terminal 2, once setup is complete
-docker compose exec -w /app backbeat bash
-claude
+docker compose exec -w /app -e IS_SANDBOX=1 backbeat bash
+claude --dangerously-skip-permissions
 ```
 
 ---
@@ -140,6 +168,7 @@ All commands run inside the container (use `./scripts/dev.sh --shell`, or
 `docker compose exec -w /app backbeat bash`, to get a shell):
 
 ```bash
+claude --dangerously-skip-permissions   # Start Claude Code with no prompts
 claude                         # Start Claude Code
 cd /app/server && npm test     # Run the test suite
 cd /app/server && npm run seed # Reset the database

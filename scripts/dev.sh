@@ -7,8 +7,13 @@
 # 3. Waits for the API health endpoint, so seeding/installs are finished
 # 4. Opens an interactive Claude Code session inside the container
 #
+# Claude runs with permission prompts disabled ("yolo mode"), which is the point
+# of the container: it can edit, run and install freely inside /app without
+# stopping to ask. Pass --safe to get normal permission prompts instead.
+#
 # Usage:
-#   ./scripts/dev.sh                 # start everything, then run Claude
+#   ./scripts/dev.sh                 # start everything, then run Claude (no prompts)
+#   ./scripts/dev.sh --safe          # same, but with normal permission prompts
 #   ./scripts/dev.sh --no-claude     # just start the stack, no Claude session
 #   ./scripts/dev.sh --rebuild       # rebuild the image first (after Dockerfile changes)
 #   ./scripts/dev.sh --shell         # open a plain bash shell instead of Claude
@@ -29,12 +34,14 @@ APP_WAIT_SECONDS=600   # First run installs npm deps and seeds the DB — this c
 RUN_CLAUDE=yes
 OPEN_SHELL=no
 REBUILD=no
+YOLO=yes
 
 for arg in "$@"; do
   case "$arg" in
     --no-claude) RUN_CLAUDE=no ;;
     --shell)     OPEN_SHELL=yes ;;
     --rebuild)   REBUILD=yes ;;
+    --safe)      YOLO=no ;;
     -h|--help)   awk 'NR>1 && /^#/ {sub(/^# ?/, ""); print; next} NR>1 {exit}' "${BASH_SOURCE[0]}"; exit 0 ;;
     *) echo "Unknown option: $arg (try --help)"; exit 1 ;;
   esac
@@ -224,29 +231,55 @@ echo "  API:  $BACKEND_URL/api/health"
 
 # --- Drop into the container --------------------------------------------------
 
+# Claude refuses --dangerously-skip-permissions while running as root unless
+# IS_SANDBOX=1 is set, and this container runs as root. Setting both is what
+# makes prompt-free ("yolo") mode work here.
+CLAUDE_ENV=(-e IS_SANDBOX=1)
+CLAUDE_ARGS=()
+if [ "$YOLO" = "yes" ]; then
+  CLAUDE_ARGS+=(--dangerously-skip-permissions)
+fi
+
+# The exact command, for the hints printed below
+claude_hint() {
+  if [ "$YOLO" = "yes" ]; then
+    echo "docker compose exec -w /app -e IS_SANDBOX=1 backbeat claude --dangerously-skip-permissions"
+  else
+    echo "docker compose exec -w /app backbeat claude"
+  fi
+}
+
 if [ "$OPEN_SHELL" = "yes" ]; then
   echo ""
   echo "=== Opening a shell in the container (type 'exit' to leave) ==="
-  exec docker compose exec -w /app backbeat bash
+  echo "  Start Claude without prompts:  claude --dangerously-skip-permissions"
+  exec docker compose exec -w /app "${CLAUDE_ENV[@]}" backbeat bash
 fi
 
 if [ "$RUN_CLAUDE" = "no" ]; then
   echo ""
   echo "Containers are running in the background."
-  echo "  Claude session:  docker compose exec -w /app backbeat claude"
+  echo "  Claude session:  $(claude_hint)"
   echo "  Stop the stack:  docker compose stop"
   exit 0
 fi
 
 echo ""
-echo "=== Starting Claude Code inside the container ==="
+if [ "$YOLO" = "yes" ]; then
+  echo "=== Starting Claude Code inside the container (permission prompts off) ==="
+  echo "  Claude will edit, run and install inside the container without asking."
+  echo "  Note that /app is your real project folder on this Mac, so file changes"
+  echo "  and git history are live. Use --safe if you want prompts back."
+else
+  echo "=== Starting Claude Code inside the container (normal prompts) ==="
+fi
 echo "  (Log in with your Claude account if prompted. Exiting Claude leaves the app running.)"
 echo ""
-docker compose exec -w /app backbeat claude
+docker compose exec -w /app "${CLAUDE_ENV[@]}" backbeat claude "${CLAUDE_ARGS[@]}"
 CLAUDE_EXIT=$?
 
 echo ""
 echo "=== Claude session ended — Backbeat is still running at $APP_URL ==="
-echo "  Reopen Claude:   docker compose exec -w /app backbeat claude"
+echo "  Reopen Claude:   $(claude_hint)"
 echo "  Stop the stack:  docker compose stop"
 exit $CLAUDE_EXIT
