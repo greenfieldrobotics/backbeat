@@ -1,6 +1,8 @@
 // Health check for the shared database.
 
+import { executeSqlStrict } from '../../db/connection.js';
+
 /** Throws if the database is unreachable. */
 export async function pingDatabase(db) {
-  await db.query('SELECT 1');
+  await executeSqlStrict(db, 'SELECT 1');
 }

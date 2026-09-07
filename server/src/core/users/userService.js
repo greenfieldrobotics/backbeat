@@ -3,6 +3,7 @@
 // Every function takes a `db` (the pool, or a pg client already inside a BEGIN) as its
 // first argument so it can run standalone or compose inside a caller's transaction.
 
+import { executeSqlStrict, executeSqlWrite } from '../../db/connection.js';
 import { httpError } from '../http.js';
 
 export const VALID_ROLES = ['admin', 'warehouse', 'procurement', 'viewer'];
@@ -12,10 +13,10 @@ const PUBLIC_COLUMNS = 'id, email, name, role, picture, created_at, last_login_a
 
 /** All users on the allowlist, ordered for display. */
 export async function listUsers(db) {
-  const { rows } = await db.query(
+  return executeSqlStrict(
+    db,
     `SELECT ${PUBLIC_COLUMNS} FROM users ORDER BY name, email`
   );
-  return rows;
 }
 
 /** Add a user to the allowlist. */
@@ -28,7 +29,8 @@ export async function createUser(db, { email, name, role }) {
   }
 
   try {
-    const { rows } = await db.query(
+    const rows = await executeSqlStrict(
+      db,
       'INSERT INTO users (email, name, role) VALUES ($1, $2, $3) RETURNING id, email, name, role, created_at, last_login_at',
       [email.trim().toLowerCase(), (name || '').trim(), role || 'viewer']
     );
@@ -63,7 +65,8 @@ export async function updateUser(db, id, { name, role }) {
   }
 
   params.push(id);
-  const { rows } = await db.query(
+  const rows = await executeSqlStrict(
+    db,
     `UPDATE users SET ${updates.join(', ')} WHERE id = $${idx} RETURNING id, email, name, role, created_at, last_login_at`,
     params
   );
@@ -74,13 +77,14 @@ export async function updateUser(db, id, { name, role }) {
 
 /** Remove a user from the allowlist. */
 export async function deleteUser(db, id) {
-  const { rowCount } = await db.query('DELETE FROM users WHERE id = $1', [id]);
+  const rowCount = await executeSqlWrite(db, 'DELETE FROM users WHERE id = $1', [id]);
   if (rowCount === 0) throw httpError('User not found', 404);
 }
 
 /** Look up a session user by id (used to deserialize the Passport session). */
 export async function findUserById(db, id) {
-  const { rows } = await db.query(
+  const rows = await executeSqlStrict(
+    db,
     'SELECT id, email, name, picture, role FROM users WHERE id = $1',
     [id]
   );
@@ -89,13 +93,14 @@ export async function findUserById(db, id) {
 
 /** Look up a user by email — this is the OAuth allowlist check. */
 export async function findUserByEmail(db, email) {
-  const { rows } = await db.query('SELECT * FROM users WHERE email = $1', [email]);
+  const rows = await executeSqlStrict(db, 'SELECT * FROM users WHERE email = $1', [email]);
   return rows[0] || null;
 }
 
 /** Record a successful Google sign-in, refreshing the cached profile fields. */
 export async function recordGoogleLogin(db, { email, google_id, name, picture }) {
-  const { rows } = await db.query(
+  const rows = await executeSqlStrict(
+    db,
     `UPDATE users SET google_id = $1, name = $2, picture = $3, last_login_at = NOW()
      WHERE email = $4 RETURNING id, email, name, picture, role`,
     [google_id, name, picture, email]
