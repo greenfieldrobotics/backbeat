@@ -11,8 +11,13 @@
 # of the container: it can edit, run and install freely inside /app without
 # stopping to ask. Pass --safe to get normal permission prompts instead.
 #
+# It runs on Sonnet by default. The division of labour is that plans are made in
+# Opus outside the container and executed by this session, so the executing model
+# does not need to be the expensive one. Override with --model.
+#
 # Usage:
-#   ./scripts/dev.sh                 # start everything, then run Claude (no prompts)
+#   ./scripts/dev.sh                 # start everything, then run Claude (Sonnet, no prompts)
+#   ./scripts/dev.sh --model opus    # run Claude on a different model
 #   ./scripts/dev.sh --safe          # same, but with normal permission prompts
 #   ./scripts/dev.sh --no-claude     # just start the stack, no Claude session
 #   ./scripts/dev.sh --rebuild       # rebuild the image first (after Dockerfile changes)
@@ -35,17 +40,33 @@ RUN_CLAUDE=yes
 OPEN_SHELL=no
 REBUILD=no
 YOLO=yes
+CLAUDE_MODEL=sonnet   # Plans are made in Opus outside the container; this session executes
 
-for arg in "$@"; do
-  case "$arg" in
+while [ $# -gt 0 ]; do
+  case "$1" in
     --no-claude) RUN_CLAUDE=no ;;
     --shell)     OPEN_SHELL=yes ;;
     --rebuild)   REBUILD=yes ;;
     --safe)      YOLO=no ;;
+    --model)
+      shift
+      if [ -z "$1" ]; then
+        echo "ERROR: --model needs a value (e.g. --model opus)"
+        exit 1
+      fi
+      CLAUDE_MODEL="$1"
+      ;;
+    --model=*)   CLAUDE_MODEL="${1#--model=}" ;;
     -h|--help)   awk 'NR>1 && /^#/ {sub(/^# ?/, ""); print; next} NR>1 {exit}' "${BASH_SOURCE[0]}"; exit 0 ;;
-    *) echo "Unknown option: $arg (try --help)"; exit 1 ;;
+    *) echo "Unknown option: $1 (try --help)"; exit 1 ;;
   esac
+  shift
 done
+
+if [ -z "$CLAUDE_MODEL" ]; then
+  echo "ERROR: --model was given an empty value"
+  exit 1
+fi
 
 # --- Sanity checks ------------------------------------------------------------
 
@@ -235,7 +256,7 @@ echo "  API:  $BACKEND_URL/api/health"
 # IS_SANDBOX=1 is set, and this container runs as root. Setting both is what
 # makes prompt-free ("yolo") mode work here.
 CLAUDE_ENV=(-e IS_SANDBOX=1)
-CLAUDE_ARGS=()
+CLAUDE_ARGS=(--model "$CLAUDE_MODEL")
 if [ "$YOLO" = "yes" ]; then
   CLAUDE_ARGS+=(--dangerously-skip-permissions)
 fi
@@ -243,16 +264,16 @@ fi
 # The exact command, for the hints printed below
 claude_hint() {
   if [ "$YOLO" = "yes" ]; then
-    echo "docker compose exec -w /app -e IS_SANDBOX=1 backbeat claude --dangerously-skip-permissions"
+    echo "docker compose exec -w /app -e IS_SANDBOX=1 backbeat claude --model $CLAUDE_MODEL --dangerously-skip-permissions"
   else
-    echo "docker compose exec -w /app backbeat claude"
+    echo "docker compose exec -w /app backbeat claude --model $CLAUDE_MODEL"
   fi
 }
 
 if [ "$OPEN_SHELL" = "yes" ]; then
   echo ""
   echo "=== Opening a shell in the container (type 'exit' to leave) ==="
-  echo "  Start Claude without prompts:  claude --dangerously-skip-permissions"
+  echo "  Start Claude without prompts:  claude --model $CLAUDE_MODEL --dangerously-skip-permissions"
   exec docker compose exec -w /app "${CLAUDE_ENV[@]}" backbeat bash
 fi
 
@@ -266,12 +287,12 @@ fi
 
 echo ""
 if [ "$YOLO" = "yes" ]; then
-  echo "=== Starting Claude Code inside the container (permission prompts off) ==="
+  echo "=== Starting Claude Code inside the container ($CLAUDE_MODEL, permission prompts off) ==="
   echo "  Claude will edit, run and install inside the container without asking."
   echo "  Note that /app is your real project folder on this Mac, so file changes"
   echo "  and git history are live. Use --safe if you want prompts back."
 else
-  echo "=== Starting Claude Code inside the container (normal prompts) ==="
+  echo "=== Starting Claude Code inside the container ($CLAUDE_MODEL, normal prompts) ==="
 fi
 echo "  (Log in with your Claude account if prompted. Exiting Claude leaves the app running.)"
 echo ""
