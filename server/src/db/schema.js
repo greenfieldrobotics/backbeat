@@ -39,6 +39,33 @@ async function createCoreTables(pool) {
     );
   `);
 
+  // Migrate `locations` (Gear Phase 3): add the inventory-location flag (G3.1) and
+  // extend the type vocabulary. `DEFAULT true` matters — it's what makes every
+  // existing row keep its current meaning for Stash's pickers; defaulting false
+  // would silently empty them out. Guarded and idempotent, same style as Phase 2's
+  // migration block in gear/schema.js. The type CHECK doesn't need an
+  // information_schema check first the way the column add does: DROP CONSTRAINT
+  // IF EXISTS followed by a fresh ADD CONSTRAINT is already safe to run on every
+  // startup regardless of the constraint's current definition, so there's no
+  // exception to swallow — unlike the pattern just below this, which is why that
+  // one is left alone rather than copied.
+  await pool.query(`
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                     WHERE table_name = 'locations' AND column_name = 'is_inventory_location') THEN
+        ALTER TABLE locations ADD COLUMN is_inventory_location BOOLEAN NOT NULL DEFAULT true;
+      END IF;
+    END $$;
+
+    -- Keep this list in sync with VALID_TYPES in core/locations/locationService.js —
+    -- changing only one of the two means either a false validation failure (service
+    -- rejects a type the constraint would accept) or a false success followed by a
+    -- 500 (service accepts a type the constraint then rejects).
+    ALTER TABLE locations DROP CONSTRAINT IF EXISTS locations_type_check;
+    ALTER TABLE locations ADD CONSTRAINT locations_type_check
+      CHECK (type IN ('Warehouse', 'Regional Site', 'Contract Manufacturer', 'Farm', 'In Transit', 'Customer Site'));
+  `);
+
   // Migrate existing databases: expand role constraint and update old 'user' role
   await pool.query(`
     DO $$

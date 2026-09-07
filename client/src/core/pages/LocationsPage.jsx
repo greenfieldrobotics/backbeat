@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { api } from '../api';
 
-const EMPTY = { name: '', type: 'Warehouse' };
+const EMPTY = { name: '', type: 'Warehouse', is_inventory_location: true };
 
 export default function LocationsPage() {
   const [locations, setLocations] = useState([]);
@@ -15,7 +15,12 @@ export default function LocationsPage() {
   useEffect(() => { load(); }, []);
 
   const openCreate = () => { setEditing(null); setForm(EMPTY); setError(''); setShowModal(true); };
-  const openEdit = (loc) => { setEditing(loc); setForm({ name: loc.name, type: loc.type }); setError(''); setShowModal(true); };
+  const openEdit = (loc) => {
+    setEditing(loc);
+    setForm({ name: loc.name, type: loc.type, is_inventory_location: loc.is_inventory_location });
+    setError('');
+    setShowModal(true);
+  };
 
   const handleSave = async () => {
     setError('');
@@ -44,13 +49,14 @@ export default function LocationsPage() {
 
       <table>
         <thead>
-          <tr><th>Name</th><th>Type</th><th>Actions</th></tr>
+          <tr><th>Name</th><th>Type</th><th>Inventory Location</th><th>Actions</th></tr>
         </thead>
         <tbody>
           {locations.map(l => (
             <tr key={l.id}>
               <td><strong>{l.name}</strong></td>
               <td>{l.type}</td>
+              <td>{l.is_inventory_location ? 'Yes' : 'No'}</td>
               <td>
                 <button className="btn-secondary btn-sm" onClick={() => openEdit(l)}>Edit</button>{' '}
                 <button className="btn-danger btn-sm" onClick={() => handleDelete(l)}>Delete</button>
@@ -75,7 +81,20 @@ export default function LocationsPage() {
                 <option>Warehouse</option>
                 <option>Regional Site</option>
                 <option>Contract Manufacturer</option>
+                <option>Farm</option>
+                <option>In Transit</option>
+                <option>Customer Site</option>
               </select>
+            </div>
+            <div className="form-group">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={form.is_inventory_location}
+                  onChange={e => setForm({...form, is_inventory_location: e.target.checked})}
+                />
+                {' '}Inventory location (controlled storage area — offered to Stash)
+              </label>
             </div>
             <div className="modal-actions">
               <button className="btn-secondary" onClick={() => setShowModal(false)}>Cancel</button>

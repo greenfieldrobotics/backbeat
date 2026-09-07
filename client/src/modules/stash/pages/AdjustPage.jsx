@@ -14,7 +14,7 @@ export default function AdjustPage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    Promise.all([api.getParts(), api.getLocations(), api.getInventory()])
+    Promise.all([api.getParts(), api.getInventoryLocations(), api.getInventory()])
       .then(([p, l, inv]) => { setParts(p); setLocations(l); setInventory(inv); })
       .finally(() => setLoading(false));
   }, []);
