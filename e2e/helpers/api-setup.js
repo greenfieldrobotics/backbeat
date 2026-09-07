@@ -82,10 +82,14 @@ export async function createTestAssetType(overrides = {}) {
 export async function createTestAssetModel(overrides = {}) {
   const manufacturer = overrides.manufacturer || 'Test Manufacturer';
   const model_name = overrides.model_name || `Test Model ${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+  let asset_type_id = overrides.asset_type_id;
+  if (!asset_type_id) {
+    asset_type_id = (await createTestAssetType()).id;
+  }
   const res = await fetch(`${BASE}/gear/asset-models`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ manufacturer, model_name, ...overrides }),
+    body: JSON.stringify({ manufacturer, model_name, ...overrides, asset_type_id }),
   });
   if (res.status === 409) {
     const list = await (await fetch(`${BASE}/gear/asset-models`)).json();
