@@ -1,0 +1,131 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A newer push to the same branch supersedes an in-flight run
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  server-tests:
+    name: Server tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Runs inside a container so the postgres service resolves as `postgres`.
+    # server/package.json's test script and server/tests/setup/globalSetup.js both
+    # hardcode that hostname; on a bare runner a service is only reachable on
+    # localhost, so the container is what makes them work unmodified.
+    container: node:20-bookworm
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: backbeat
+          POSTGRES_PASSWORD: backbeat
+          POSTGRES_DB: backbeat
+        options: >-
+          --health-cmd "pg_isready -U backbeat"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install server dependencies
+        working-directory: server
+        run: npm ci
+      # globalSetup drops and recreates backbeat_test, then runs
+      # initializeDatabase() against it, so no schema step is needed here.
+      - name: Run server suite
+        working-directory: server
+        run: npm test
+
+  client-build:
+    name: Client build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+      - name: Install client dependencies
+        working-directory: client
+        run: npm ci
+      # --if-present so this becomes active on its own when the Gear frontend
+      # phase adds the typecheck script; it is not defined yet.
+      - name: Typecheck
+        working-directory: client
+        run: npm run typecheck --if-present
+      - name: Build
+        working-directory: client
+        run: npm run build
+
+  e2e:
+    name: E2E tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    container: node:20-bookworm
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: backbeat
+          POSTGRES_PASSWORD: backbeat
+          POSTGRES_DB: backbeat
+        options: >-
+          --health-cmd "pg_isready -U backbeat"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 15
+    env:
+      DATABASE_URL: postgres://backbeat:backbeat@postgres:5432/backbeat
+      # Deliberately no GOOGLE_CLIENT_ID: that is what makes the auth middleware
+      # fall back to its dev admin user, which the specs rely on.
+      SESSION_SECRET: ci-e2e-secret
+      CORS_ORIGIN: http://localhost:5173
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm ci --prefix server
+          npm ci --prefix client
+      - name: Install Playwright chromium
+        run: npx playwright install --with-deps chromium
+      - name: Start API
+        working-directory: server
+        run: |
+          node src/index.js > /tmp/api.log 2>&1 &
+          for i in $(seq 1 60); do
+            curl -sf http://localhost:3001/api/health > /dev/null && exit 0
+            sleep 1
+          done
+          echo "API failed to start:"; cat /tmp/api.log; exit 1
+      - name: Start client
+        working-directory: client
+        run: |
+          npm run dev > /tmp/client.log 2>&1 &
+          for i in $(seq 1 60); do
+            curl -sf http://localhost:5173 > /dev/null && exit 0
+            sleep 1
+          done
+          echo "Client failed to start:"; cat /tmp/client.log; exit 1
+      - name: Run Playwright specs
+        run: npx playwright test
+      - name: Server logs on failure
+        if: failure()
+        run: |
+          echo "--- api ---"; tail -50 /tmp/api.log || true
+          echo "--- client ---"; tail -50 /tmp/client.log || true
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-artifacts
+          path: test-results/
+          retention-days: 7
