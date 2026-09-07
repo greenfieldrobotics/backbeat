@@ -13,7 +13,7 @@ describe('Cross-Feature Workflow Tests', () => {
     const warehouse = await createLocation({ name: 'WF-A Warehouse', type: 'Warehouse' });
 
     // 4. Create PO with 2 line items
-    const poRes = await request(app).post('/api/purchase-orders').send({
+    const poRes = await request(app).post('/api/stash/purchase-orders').send({
       supplier_id: supplier.id,
       line_items: [
         { part_id: partA.id, quantity_ordered: 10, unit_cost: 5.00 },
@@ -24,10 +24,10 @@ describe('Cross-Feature Workflow Tests', () => {
     const po = poRes.body;
 
     // 5. Update to Ordered
-    await request(app).put(`/api/purchase-orders/${po.id}/status`).send({ status: 'Ordered' });
+    await request(app).put(`/api/stash/purchase-orders/${po.id}/status`).send({ status: 'Ordered' });
 
     // 6. Receive all items
-    const recRes = await request(app).post(`/api/purchase-orders/${po.id}/receive`).send({
+    const recRes = await request(app).post(`/api/stash/purchase-orders/${po.id}/receive`).send({
       location_id: warehouse.id,
       items: [
         { line_item_id: po.line_items[0].id, quantity_received: 10 },
@@ -47,7 +47,7 @@ describe('Cross-Feature Workflow Tests', () => {
     expect(layers.length).toBe(2);
 
     // 10. Issue 3 of Part A
-    const issueRes = await request(app).post('/api/inventory/issue').send({
+    const issueRes = await request(app).post('/api/stash/inventory/issue').send({
       part_id: partA.id,
       location_id: warehouse.id,
       quantity: 3,
@@ -63,7 +63,7 @@ describe('Cross-Feature Workflow Tests', () => {
     expect(layerA[0].remaining_qty).toBe(7);
 
     // 13-16. Run valuation report
-    const valRes = await request(app).get('/api/inventory/valuation');
+    const valRes = await request(app).get('/api/stash/inventory/valuation');
     const partASummary = valRes.body.summary.find(s => s.part_number === 'WF-A-PART-A');
     expectCost(partASummary.total_value, 35.00); // 7 * 5
     const partBSummary = valRes.body.summary.find(s => s.part_number === 'WF-A-PART-B');
@@ -90,7 +90,7 @@ describe('Cross-Feature Workflow Tests', () => {
     await receiveInventory({ part, location: locA, supplier, quantity: 20, unitCost: 8.00 });
 
     // Move 12 from A to B
-    await request(app).post('/api/inventory/move').send({
+    await request(app).post('/api/stash/inventory/move').send({
       part_id: part.id,
       from_location_id: locA.id,
       to_location_id: locB.id,
@@ -111,7 +111,7 @@ describe('Cross-Feature Workflow Tests', () => {
     expect(layersB[0].unit_cost).toBe(8.00);
 
     // Issue 5 from B
-    await request(app).post('/api/inventory/issue').send({
+    await request(app).post('/api/stash/inventory/issue').send({
       part_id: part.id,
       location_id: locB.id,
       quantity: 5,
@@ -124,7 +124,7 @@ describe('Cross-Feature Workflow Tests', () => {
     expect(layersB2[0].remaining_qty).toBe(7);
 
     // Valuation
-    const valRes = await request(app).get('/api/inventory/valuation');
+    const valRes = await request(app).get('/api/stash/inventory/valuation');
     const summA = valRes.body.summary.find(s => s.location_name === locA.name);
     expectCost(summA.total_value, 64.00); // 8 * 8
     const summB = valRes.body.summary.find(s => s.location_name === locB.name);
@@ -143,7 +143,7 @@ describe('Cross-Feature Workflow Tests', () => {
     await receiveInventory({ part, location: locA, supplier, quantity: 5, unitCost: 20.00 });
 
     // 3. Move 7 from A to B (takes 5 from Layer 1 + 2 from Layer 2)
-    await request(app).post('/api/inventory/move').send({
+    await request(app).post('/api/stash/inventory/move').send({
       part_id: part.id,
       from_location_id: locA.id,
       to_location_id: locB.id,
@@ -162,7 +162,7 @@ describe('Cross-Feature Workflow Tests', () => {
     expect(layersB[1].unit_cost).toBe(20.00);
 
     // 5. Issue 6 from B (consumes 5 @ $10 + 1 @ $20)
-    const issueRes = await request(app).post('/api/inventory/issue').send({
+    const issueRes = await request(app).post('/api/stash/inventory/issue').send({
       part_id: part.id,
       location_id: locB.id,
       quantity: 6,
@@ -196,7 +196,7 @@ describe('Cross-Feature Workflow Tests', () => {
     await receiveInventory({ part, location: warehouse, supplier, quantity: 10, unitCost: 5.00 });
 
     // 2. Issue 8
-    const issueRes = await request(app).post('/api/inventory/issue').send({
+    const issueRes = await request(app).post('/api/stash/inventory/issue').send({
       part_id: part.id,
       location_id: warehouse.id,
       quantity: 8,
@@ -206,7 +206,7 @@ describe('Cross-Feature Workflow Tests', () => {
     expectCost(issueRes.body.total_cost, 40.00);
 
     // 3. Return 3 @ $7 (different cost)
-    const returnRes = await request(app).post('/api/inventory/return').send({
+    const returnRes = await request(app).post('/api/stash/inventory/return').send({
       part_id: part.id,
       location_id: warehouse.id,
       quantity: 3,
@@ -235,7 +235,7 @@ describe('Cross-Feature Workflow Tests', () => {
     expectCost(layers[1].unit_cost, 7.00);
 
     // 6. Issue 4 more — should consume 2 @ $5 (oldest) + 2 @ $7 (return layer)
-    const issue2Res = await request(app).post('/api/inventory/issue').send({
+    const issue2Res = await request(app).post('/api/stash/inventory/issue').send({
       part_id: part.id,
       location_id: warehouse.id,
       quantity: 4,
@@ -249,7 +249,7 @@ describe('Cross-Feature Workflow Tests', () => {
     expect(inv2[0].quantity_on_hand).toBe(1);
 
     // 8. Valuation: 1 * $7 = $7
-    const valRes = await request(app).get('/api/inventory/valuation');
+    const valRes = await request(app).get('/api/stash/inventory/valuation');
     expectCost(valRes.body.grand_total, 7.00);
 
     await assertInventoryConsistency(part.id, warehouse.id);
@@ -264,7 +264,7 @@ describe('Cross-Feature Workflow Tests', () => {
     await receiveInventory({ part, location: warehouse, supplier, quantity: 20, unitCost: 10.00 });
 
     // 2. Adjust down to 15 (shortage of 5)
-    const adjDown = await request(app).post('/api/inventory/adjust').send({
+    const adjDown = await request(app).post('/api/stash/inventory/adjust').send({
       part_id: part.id,
       location_id: warehouse.id,
       new_quantity: 15,
@@ -275,7 +275,7 @@ describe('Cross-Feature Workflow Tests', () => {
     expectCost(adjDown.body.total_cost, 50.00); // 5 * 10
 
     // 3. Adjust up to 18 (overage of 3, should use recent cost $10)
-    const adjUp = await request(app).post('/api/inventory/adjust').send({
+    const adjUp = await request(app).post('/api/stash/inventory/adjust').send({
       part_id: part.id,
       location_id: warehouse.id,
       new_quantity: 18,
@@ -301,7 +301,7 @@ describe('Cross-Feature Workflow Tests', () => {
     expect(layers[1].remaining_qty).toBe(3);
 
     // 6. Valuation: (15 + 3) * 10 = 180
-    const valRes = await request(app).get('/api/inventory/valuation');
+    const valRes = await request(app).get('/api/stash/inventory/valuation');
     expectCost(valRes.body.grand_total, 180.00);
 
     // 7. Audit trail: RECEIVE, ADJUSTMENT (negative), ADJUSTMENT (positive) = 3 total
@@ -328,7 +328,7 @@ describe('Cross-Feature Workflow Tests', () => {
     await receiveInventory({ part, location: warehouse, supplier, quantity: 10, unitCost: 20.00 });
 
     // 2. Issue 6 to field
-    await request(app).post('/api/inventory/issue').send({
+    await request(app).post('/api/stash/inventory/issue').send({
       part_id: part.id,
       location_id: warehouse.id,
       quantity: 6,
@@ -336,7 +336,7 @@ describe('Cross-Feature Workflow Tests', () => {
     });
 
     // 3. Return 2 @ $20
-    await request(app).post('/api/inventory/return').send({
+    await request(app).post('/api/stash/inventory/return').send({
       part_id: part.id,
       location_id: warehouse.id,
       quantity: 2,
@@ -349,7 +349,7 @@ describe('Cross-Feature Workflow Tests', () => {
     expect(inv1[0].quantity_on_hand).toBe(6);
 
     // 4. Adjust to 8 (overage of 2, no cost provided → uses most recent $20)
-    const adjRes = await request(app).post('/api/inventory/adjust').send({
+    const adjRes = await request(app).post('/api/stash/inventory/adjust').send({
       part_id: part.id,
       location_id: warehouse.id,
       new_quantity: 8,
@@ -364,7 +364,7 @@ describe('Cross-Feature Workflow Tests', () => {
     expect(inv2[0].quantity_on_hand).toBe(8);
 
     // 6. Valuation: all at $20 = 8 * 20 = 160
-    const valRes = await request(app).get('/api/inventory/valuation');
+    const valRes = await request(app).get('/api/stash/inventory/valuation');
     expectCost(valRes.body.grand_total, 160.00);
 
     // 7. Full audit trail: RECEIVE, ISSUE, RETURN, ADJUSTMENT
@@ -390,7 +390,7 @@ describe('Cross-Feature Workflow Tests', () => {
     await receiveInventory({ part, location: warehouse, supplier, quantity: 10, unitCost: 15.00 });
 
     // 2. Issue 3 (cost = $45)
-    const issueRes = await request(app).post('/api/inventory/issue').send({
+    const issueRes = await request(app).post('/api/stash/inventory/issue').send({
       part_id: part.id,
       location_id: warehouse.id,
       quantity: 3,
@@ -398,7 +398,7 @@ describe('Cross-Feature Workflow Tests', () => {
     expectCost(issueRes.body.total_cost, 45.00);
 
     // 3. Dispose 2 (cost = $30)
-    const disposeRes = await request(app).post('/api/inventory/dispose').send({
+    const disposeRes = await request(app).post('/api/stash/inventory/dispose').send({
       part_id: part.id,
       location_id: warehouse.id,
       quantity: 2,
@@ -414,7 +414,7 @@ describe('Cross-Feature Workflow Tests', () => {
     expect(layers[0].remaining_qty).toBe(5);
 
     // 5. Valuation = 5 * 15 = 75
-    const valRes = await request(app).get('/api/inventory/valuation');
+    const valRes = await request(app).get('/api/stash/inventory/valuation');
     expectCost(valRes.body.grand_total, 75.00);
 
     // 6. Audit trail: RECEIVE, ISSUE, DISPOSE in chronological order

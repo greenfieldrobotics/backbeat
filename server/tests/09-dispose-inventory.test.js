@@ -16,7 +16,7 @@ describe('Dispose Inventory', () => {
   test('Dispose inventory with reason', async () => {
     await receiveInventory({ part, location, supplier, quantity: 10, unitCost: 5.00 });
 
-    const res = await request(app).post('/api/inventory/dispose').send({
+    const res = await request(app).post('/api/stash/inventory/dispose').send({
       part_id: part.id,
       location_id: location.id,
       quantity: 3,
@@ -32,7 +32,7 @@ describe('Dispose Inventory', () => {
   test('Inventory decreases after dispose', async () => {
     await receiveInventory({ part, location, supplier, quantity: 10, unitCost: 5.00 });
 
-    await request(app).post('/api/inventory/dispose').send({
+    await request(app).post('/api/stash/inventory/dispose').send({
       part_id: part.id,
       location_id: location.id,
       quantity: 4,
@@ -49,7 +49,7 @@ describe('Dispose Inventory', () => {
   test('Audit trail with DISPOSE type and reason', async () => {
     await receiveInventory({ part, location, supplier, quantity: 10, unitCost: 5.00 });
 
-    await request(app).post('/api/inventory/dispose').send({
+    await request(app).post('/api/stash/inventory/dispose').send({
       part_id: part.id,
       location_id: location.id,
       quantity: 3,
@@ -69,7 +69,7 @@ describe('Dispose Inventory', () => {
     await receiveInventory({ part, location, supplier, quantity: 5, unitCost: 10.00 });
     await receiveInventory({ part, location, supplier, quantity: 5, unitCost: 20.00 });
 
-    const res = await request(app).post('/api/inventory/dispose').send({
+    const res = await request(app).post('/api/stash/inventory/dispose').send({
       part_id: part.id,
       location_id: location.id,
       quantity: 7,
@@ -92,7 +92,7 @@ describe('Dispose Inventory', () => {
   test('Missing reason returns 400', async () => {
     await receiveInventory({ part, location, supplier, quantity: 10, unitCost: 5.00 });
 
-    const res = await request(app).post('/api/inventory/dispose').send({
+    const res = await request(app).post('/api/stash/inventory/dispose').send({
       part_id: part.id,
       location_id: location.id,
       quantity: 3,
@@ -104,7 +104,7 @@ describe('Dispose Inventory', () => {
   test('Insufficient inventory returns 400', async () => {
     await receiveInventory({ part, location, supplier, quantity: 5, unitCost: 10.00 });
 
-    const res = await request(app).post('/api/inventory/dispose').send({
+    const res = await request(app).post('/api/stash/inventory/dispose').send({
       part_id: part.id,
       location_id: location.id,
       quantity: 100,
@@ -114,7 +114,7 @@ describe('Dispose Inventory', () => {
   });
 
   test('Non-existent part returns 404', async () => {
-    const res = await request(app).post('/api/inventory/dispose').send({
+    const res = await request(app).post('/api/stash/inventory/dispose').send({
       part_id: 99999,
       location_id: location.id,
       quantity: 1,
@@ -124,7 +124,7 @@ describe('Dispose Inventory', () => {
   });
 
   test('Zero quantity returns 400', async () => {
-    const res = await request(app).post('/api/inventory/dispose').send({
+    const res = await request(app).post('/api/stash/inventory/dispose').send({
       part_id: part.id,
       location_id: location.id,
       quantity: 0,

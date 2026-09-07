@@ -7,7 +7,7 @@ describe('Suppliers', () => {
   });
 
   test('Create a supplier', async () => {
-    const res = await request(app).post('/api/suppliers').send({ name: 'Acme Corp' });
+    const res = await request(app).post('/api/stash/suppliers').send({ name: 'Acme Corp' });
     expect(res.status).toBe(201);
     expect(res.body.name).toBe('Acme Corp');
     expect(res.body.id).toBeDefined();
@@ -18,7 +18,7 @@ describe('Suppliers', () => {
     await createSupplier({ name: 'Zulu Supply' });
     await createSupplier({ name: 'Alpha Parts' });
 
-    const res = await request(app).get('/api/suppliers');
+    const res = await request(app).get('/api/stash/suppliers');
     expect(res.status).toBe(200);
     expect(res.body.length).toBe(2);
     expect(res.body[0].name).toBe('Alpha Parts');
@@ -26,13 +26,13 @@ describe('Suppliers', () => {
   });
 
   test('Missing name returns 400', async () => {
-    const res = await request(app).post('/api/suppliers').send({});
+    const res = await request(app).post('/api/stash/suppliers').send({});
     expect(res.status).toBe(400);
   });
 
   test('Duplicate name returns 409', async () => {
     await createSupplier({ name: 'Unique Supplier' });
-    const res = await request(app).post('/api/suppliers').send({ name: 'Unique Supplier' });
+    const res = await request(app).post('/api/stash/suppliers').send({ name: 'Unique Supplier' });
     expect(res.status).toBe(409);
   });
 });

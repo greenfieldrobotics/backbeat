@@ -26,6 +26,7 @@ try {
 
   // Drop and recreate tables
   await client.query(`
+    DROP TABLE IF EXISTS assets CASCADE;
     DROP TABLE IF EXISTS inventory_transactions CASCADE;
     DROP TABLE IF EXISTS fifo_layers CASCADE;
     DROP TABLE IF EXISTS inventory CASCADE;
@@ -185,6 +186,22 @@ try {
     supplierCount++;
   }
 
+  // --- Seed sample Gear assets (asset management module) ---
+  // location_id references the shared/core locations seeded above (cross-module link).
+  const sampleAssets = [
+    ['ROBOT-001', 'SN-RB-1001', 'Robot', 'In Use', 'Main Warehouse'],
+    ['ROBOT-002', 'SN-RB-1002', 'Robot', 'Available', 'Kansas Regional'],
+    ['LAPTOP-014', 'SN-LT-2014', 'Laptop', 'In Use', 'Main Warehouse'],
+    ['TRUCK-003', 'SN-VH-3003', 'Vehicle', 'Maintenance', 'Texas Regional'],
+  ];
+  for (const [tag, serial, type, status, locName] of sampleAssets) {
+    await seedClient.query(`
+      INSERT INTO assets (asset_tag, serial_number, asset_type, status, location_id)
+      VALUES ($1, $2, $3, $4, (SELECT id FROM locations WHERE name = $5))
+      ON CONFLICT (asset_tag) DO NOTHING
+    `, [tag, serial, type, status, locName]);
+  }
+
   await seedClient.query('COMMIT');
 
   // --- Summary ---
@@ -196,6 +213,7 @@ try {
   console.log(`  - ${partCount} parts loaded from item master (${skipped} duplicates skipped)`);
   console.log(`  - ${locations.length} locations`);
   console.log(`  - ${supplierCount} suppliers (auto-populated from manufacturers)`);
+  console.log(`  - ${sampleAssets.length} sample assets (Gear module)`);
   console.log('');
   console.log('Parts by classification:');
   for (const row of classificationCounts) {

@@ -7,6 +7,7 @@ import { query } from '../../src/db/connection.js';
 export async function truncateAllTables() {
   await query(`
     TRUNCATE TABLE
+      assets,
       inventory_transactions,
       fifo_layers,
       inventory,

@@ -82,24 +82,24 @@ describe('Dashboard API', () => {
       await receiveInventory({ part: partA, location: regional, supplier, quantity: 10, unitCost: 8.00 });
 
       // Issue some from warehouse
-      await request(app).post('/api/inventory/issue').send({
+      await request(app).post('/api/stash/inventory/issue').send({
         part_id: partA.id, location_id: warehouse.id, quantity: 5, reason: 'test',
       });
 
       // Move some to regional
-      await request(app).post('/api/inventory/move').send({
+      await request(app).post('/api/stash/inventory/move').send({
         part_id: partB.id, from_location_id: warehouse.id, to_location_id: regional.id, quantity: 2,
       });
 
       // Dispose some
-      await request(app).post('/api/inventory/dispose').send({
+      await request(app).post('/api/stash/inventory/dispose').send({
         part_id: partA.id, location_id: regional.id, quantity: 3, reason: 'test',
       });
 
       // Get dashboard and valuation
       const [dashRes, valRes] = await Promise.all([
         request(app).get('/api/dashboard'),
-        request(app).get('/api/inventory/valuation'),
+        request(app).get('/api/stash/inventory/valuation'),
       ]);
 
       expect(dashRes.status).toBe(200);
@@ -147,7 +147,7 @@ describe('Dashboard API', () => {
       // Part with qty=0: receive 2 then issue 2
       const partE = await createPart({ part_number: 'LS-E-0' });
       await receiveInventory({ part: partE, location, supplier, quantity: 2, unitCost: 1 });
-      await request(app).post('/api/inventory/issue').send({
+      await request(app).post('/api/stash/inventory/issue').send({
         part_id: partE.id, location_id: location.id, quantity: 2, reason: 'test',
       });
 
@@ -203,7 +203,7 @@ describe('Dashboard API', () => {
       const partC = await createPart({ part_number: 'PO-AGG-C' });
 
       // Create PO with 3 line items: 10@$5, 20@$8, 5@$15
-      const poRes = await request(app).post('/api/purchase-orders').send({
+      const poRes = await request(app).post('/api/stash/purchase-orders').send({
         supplier_id: supplier.id,
         line_items: [
           { part_id: partA.id, quantity_ordered: 10, unit_cost: 5 },
@@ -230,14 +230,14 @@ describe('Dashboard API', () => {
       const part = await createPart({ part_number: 'PO-PARTIAL' });
       const location = await createLocation({ name: 'PO Partial Loc', type: 'Warehouse' });
 
-      const poRes = await request(app).post('/api/purchase-orders').send({
+      const poRes = await request(app).post('/api/stash/purchase-orders').send({
         supplier_id: supplier.id,
         line_items: [{ part_id: part.id, quantity_ordered: 20, unit_cost: 10 }],
       });
-      await request(app).put(`/api/purchase-orders/${poRes.body.id}/status`).send({ status: 'Ordered' });
+      await request(app).put(`/api/stash/purchase-orders/${poRes.body.id}/status`).send({ status: 'Ordered' });
 
       // Partial receive
-      await request(app).post(`/api/purchase-orders/${poRes.body.id}/receive`).send({
+      await request(app).post(`/api/stash/purchase-orders/${poRes.body.id}/receive`).send({
         location_id: location.id,
         items: [{ line_item_id: poRes.body.line_items[0].id, quantity_received: 8 }],
       });
@@ -284,7 +284,7 @@ describe('Dashboard API', () => {
       expectCost(whBefore.total_value, 200);
 
       // Issue 5
-      await request(app).post('/api/inventory/issue').send({
+      await request(app).post('/api/stash/inventory/issue').send({
         part_id: partA.id, location_id: warehouse.id, quantity: 5, reason: 'test',
       });
 
@@ -296,7 +296,7 @@ describe('Dashboard API', () => {
 
     test('after move: location-type totals shift, grand total same', async () => {
       // Move 8 from Warehouse to Regional Site
-      await request(app).post('/api/inventory/move').send({
+      await request(app).post('/api/stash/inventory/move').send({
         part_id: partA.id, from_location_id: warehouse.id, to_location_id: regional.id, quantity: 8,
       });
 
@@ -312,7 +312,7 @@ describe('Dashboard API', () => {
     });
 
     test('after dispose: totals decrease', async () => {
-      await request(app).post('/api/inventory/dispose').send({
+      await request(app).post('/api/stash/inventory/dispose').send({
         part_id: partA.id, location_id: warehouse.id, quantity: 3, reason: 'damaged',
       });
 
@@ -323,7 +323,7 @@ describe('Dashboard API', () => {
     });
 
     test('after return: totals increase', async () => {
-      await request(app).post('/api/inventory/return').send({
+      await request(app).post('/api/stash/inventory/return').send({
         part_id: partA.id, location_id: warehouse.id, quantity: 5, unit_cost: 10.00,
       });
 
@@ -335,7 +335,7 @@ describe('Dashboard API', () => {
 
     test('after adjustment: totals change by delta', async () => {
       // Adjust down from 20 to 14 (delta = -6)
-      await request(app).post('/api/inventory/adjust').send({
+      await request(app).post('/api/stash/inventory/adjust').send({
         part_id: partA.id, location_id: warehouse.id, new_quantity: 14, reason: 'count',
       });
 
@@ -347,7 +347,7 @@ describe('Dashboard API', () => {
 
     test('issue creates low-stock alert', async () => {
       // Issue 17 of 20 → leaves 3, which is ≤ 5
-      await request(app).post('/api/inventory/issue').send({
+      await request(app).post('/api/stash/inventory/issue').send({
         part_id: partA.id, location_id: warehouse.id, quantity: 17, reason: 'test',
       });
 

@@ -1,19 +1,9 @@
 import { BrowserRouter, Routes, Route, NavLink } from 'react-router-dom';
-import { AuthProvider, useAuth } from './context/AuthContext';
-import LoginPage from './pages/LoginPage';
-import PartsPage from './pages/PartsPage';
-import LocationsPage from './pages/LocationsPage';
-import PurchaseOrdersPage from './pages/PurchaseOrdersPage';
-import PurchaseOrderDetail from './pages/PurchaseOrderDetail';
-import InventoryPage from './pages/InventoryPage';
-import IssuePage from './pages/IssuePage';
-import MovePage from './pages/MovePage';
-import DisposePage from './pages/DisposePage';
-import ReturnPage from './pages/ReturnPage';
-import AdjustPage from './pages/AdjustPage';
-import ValuationPage from './pages/ValuationPage';
-import TransactionsPage from './pages/TransactionsPage';
-import UsersPage from './pages/UsersPage';
+import { AuthProvider, useAuth } from './core/context/AuthContext';
+import LoginPage from './core/pages/LoginPage';
+import LocationsPage from './core/pages/LocationsPage';
+import UsersPage from './core/pages/UsersPage';
+import { modules } from './modules/registry';
 import './App.css';
 
 function AppShell() {
@@ -36,22 +26,28 @@ function AppShell() {
       <nav className="sidebar">
         <div className="logo">
           <h2>Backbeat</h2>
-          <span className="module-badge">Stash</span>
         </div>
-        <ul>
-          <li><NavLink to="/">Inventory</NavLink></li>
-          <li><NavLink to="/parts">Parts Catalog</NavLink></li>
-          <li><NavLink to="/locations">Locations</NavLink></li>
-          <li><NavLink to="/purchase-orders">Purchase Orders</NavLink></li>
-          <li><NavLink to="/issue">Issue Parts</NavLink></li>
-          <li><NavLink to="/move">Move Inventory</NavLink></li>
-          <li><NavLink to="/dispose">Dispose</NavLink></li>
-          <li><NavLink to="/return">Return Parts</NavLink></li>
-          <li><NavLink to="/adjust">Adjust Inventory</NavLink></li>
-          <li><NavLink to="/valuation">FIFO Valuation</NavLink></li>
-          <li><NavLink to="/transactions">Audit Trail</NavLink></li>
-          {user.role === 'admin' && <li><NavLink to="/users">User Management</NavLink></li>}
-        </ul>
+        <div className="nav-scroll">
+          {modules.map(m => (
+            <div className="nav-section" key={m.key}>
+              <div className="nav-section-title">{m.label}</div>
+              <ul>
+                {m.nav.map(item => (
+                  <li key={item.to}>
+                    <NavLink to={item.to} end={item.end}>{item.label}</NavLink>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+          <div className="nav-section">
+            <div className="nav-section-title">Admin</div>
+            <ul>
+              <li><NavLink to="/locations">Locations</NavLink></li>
+              {user.role === 'admin' && <li><NavLink to="/users">User Management</NavLink></li>}
+            </ul>
+          </div>
+        </div>
         <div className="sidebar-user">
           <div className="sidebar-user-name">{user.name || user.email}</div>
           <button className="sidebar-signout" onClick={logout}>Sign out</button>
@@ -59,18 +55,11 @@ function AppShell() {
       </nav>
       <main className="content">
         <Routes>
-          <Route path="/" element={<InventoryPage />} />
-          <Route path="/parts" element={<PartsPage />} />
+          {modules.flatMap(m => m.routes).map(r => (
+            <Route key={r.path} path={r.path} element={r.element} />
+          ))}
+          {/* Shared / core routes */}
           <Route path="/locations" element={<LocationsPage />} />
-          <Route path="/purchase-orders" element={<PurchaseOrdersPage />} />
-          <Route path="/purchase-orders/:id" element={<PurchaseOrderDetail />} />
-          <Route path="/issue" element={<IssuePage />} />
-          <Route path="/move" element={<MovePage />} />
-          <Route path="/dispose" element={<DisposePage />} />
-          <Route path="/return" element={<ReturnPage />} />
-          <Route path="/adjust" element={<AdjustPage />} />
-          <Route path="/valuation" element={<ValuationPage />} />
-          <Route path="/transactions" element={<TransactionsPage />} />
           <Route path="/users" element={<UsersPage />} />
         </Routes>
       </main>

@@ -17,7 +17,7 @@ describe('FIFO Costing Scenarios', () => {
     await receiveInventory({ part, location, supplier, quantity: 10, unitCost: 7.00 });
 
     // Issue 15 units
-    const res = await request(app).post('/api/inventory/issue').send({
+    const res = await request(app).post('/api/stash/inventory/issue').send({
       part_id: part.id,
       location_id: location.id,
       quantity: 15,
@@ -36,7 +36,7 @@ describe('FIFO Costing Scenarios', () => {
     expect(layers[1].remaining_qty).toBe(5);  // Layer B partially consumed
 
     // Remaining value: 5 * 7 = 35
-    const valRes = await request(app).get('/api/inventory/valuation');
+    const valRes = await request(app).get('/api/stash/inventory/valuation');
     const partSummary = valRes.body.summary.find(s => s.part_number === part.part_number);
     expectCost(partSummary.total_value, 35.00);
   });
@@ -44,7 +44,7 @@ describe('FIFO Costing Scenarios', () => {
   test('5B: Exact layer depletion', async () => {
     await receiveInventory({ part, location, supplier, quantity: 10, unitCost: 5.00 });
 
-    const res = await request(app).post('/api/inventory/issue').send({
+    const res = await request(app).post('/api/stash/inventory/issue').send({
       part_id: part.id,
       location_id: location.id,
       quantity: 10,
@@ -72,7 +72,7 @@ describe('FIFO Costing Scenarios', () => {
     await receiveInventory({ part, location, supplier, quantity: 1, unitCost: 20.00 });
     await receiveInventory({ part, location, supplier, quantity: 1, unitCost: 30.00 });
 
-    const res = await request(app).post('/api/inventory/issue').send({
+    const res = await request(app).post('/api/stash/inventory/issue').send({
       part_id: part.id,
       location_id: location.id,
       quantity: 2,
@@ -92,7 +92,7 @@ describe('FIFO Costing Scenarios', () => {
   test('5D: High-precision cost values', async () => {
     await receiveInventory({ part, location, supplier, quantity: 100, unitCost: 3.7525 });
 
-    const res = await request(app).post('/api/inventory/issue').send({
+    const res = await request(app).post('/api/stash/inventory/issue').send({
       part_id: part.id,
       location_id: location.id,
       quantity: 37,
@@ -109,7 +109,7 @@ describe('FIFO Costing Scenarios', () => {
     expect(layers[0].remaining_qty).toBe(63);
 
     // Remaining value: 63 * 3.7525 = 236.4075
-    const valRes = await request(app).get('/api/inventory/valuation');
+    const valRes = await request(app).get('/api/stash/inventory/valuation');
     const partSummary = valRes.body.summary.find(s => s.part_number === part.part_number);
     expectCost(partSummary.total_value, 236.4075);
   });
@@ -125,7 +125,7 @@ describe('FIFO Costing Scenarios', () => {
     );
     expect(layersBefore.length).toBe(2);
 
-    const res = await request(app).post('/api/inventory/issue').send({
+    const res = await request(app).post('/api/stash/inventory/issue').send({
       part_id: part.id,
       location_id: location.id,
       quantity: 7,

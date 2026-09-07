@@ -1,10 +1,71 @@
 # Backbeat - ERP System
 
 ## Overview
-Backbeat is an ERP system. The first module is **Stash** (inventory management). Future modules will be added over time.
+Backbeat is an ERP system built as a **modular monolith**. Modules currently in the codebase:
+- **Stash** — inventory management (parts, purchase orders, FIFO costing, inventory transactions). Fully built.
+- **Gear** — asset management (assets: serial, type, status, location). Scaffolded; extend as needed.
+
+Future modules will be added over time following the same structure.
 
 ## Key Design Goal
 This system is designed to be maintained and extended by **non-engineers using Claude Code** (vibe coding). The automated test suite and CI/CD pipeline serve as the primary quality gate — not human code review. All architectural decisions should prioritize making the system safe and easy to modify without deep engineering knowledge.
+
+---
+
+## Architecture & Module Structure
+
+Backbeat is a **modular monolith**: one Express server, one React app, **one PostgreSQL database**, with code organized into modules. Modules are a code-organization convention, NOT a runtime boundary — everything shares one database and one process, so **cross-module workflows are first-class** (a single action can touch multiple modules atomically in one transaction).
+
+### Backend (`server/src/`)
+```
+db/                      Shared database layer (one DB for the whole app)
+  connection.js          pg pool + query/getClient helpers
+  schema.js              Orchestrator: creates core tables, then calls each module's schema
+  seed.js                Dev seed data
+core/                    Shared concerns used across modules
+  auth/                  Google OAuth + auth middleware
+  users/                 User management (routes.js)
+  locations/             Locations — SHARED: used by both Stash and Gear (routes.js)
+  dashboard/             Cross-module dashboard (routes.js)
+modules/
+  stash/
+    schema.js            createStashTables() — parts, suppliers, POs, fifo_layers, inventory, transactions
+    routes/              Express routers (mounted under /api/stash/*)
+    services/            Reusable business logic that takes a `client` (for transaction composition)
+  gear/
+    schema.js            createGearTables() — assets
+    routes/              Mounted under /api/gear/*
+    services/            e.g. assetService.createAsset(client, data)
+workflows/               Cross-module workflows (mounted under /api/workflows/*)
+  commissionAsset.js     Example: creates a Gear asset AND issues Stash parts in ONE transaction
+app.js                   Wires everything together
+```
+
+### API namespacing
+- Shared/core: `/api/users`, `/api/locations`, `/api/dashboard`, `/api/health`
+- Stash module: `/api/stash/*` (e.g. `/api/stash/parts`, `/api/stash/inventory/issue`)
+- Gear module: `/api/gear/*` (e.g. `/api/gear/assets`)
+- Cross-module workflows: `/api/workflows/*`
+
+### Frontend (`client/src/`)
+```
+core/                    api.js (all HTTP calls), context/AuthContext, shared pages (Login, Users, Locations)
+modules/
+  stash/                 pages/, components/, module.jsx (nav + routes registration)
+  gear/                  pages/, module.jsx
+  registry.js            Lists the modules — the sidebar and router are generated from this
+App.jsx                  Renders module-grouped sidebar + routes from the registry
+```
+
+### How to add a new module (e.g. "Fleet")
+1. **Backend schema:** create `server/src/modules/fleet/schema.js` exporting `createFleetTables(pool)`; import + call it in `server/src/db/schema.js`.
+2. **Backend routes:** create `server/src/modules/fleet/routes/*.js`; mount in `app.js` under `/api/fleet/*`.
+3. **Frontend:** create `client/src/modules/fleet/module.jsx` (nav + routes) and add it to `client/src/modules/registry.js`. Add API methods in `client/src/core/api.js`.
+4. **Tests:** add `server/tests/NN-fleet-*.test.js` and `e2e/tests/NN-fleet-*.spec.js` (they're auto-discovered).
+5. **Cross-module logic** goes in `server/src/workflows/` and composes module `services/` inside one transaction — see `workflows/commissionAsset.js`.
+
+### Cross-module workflow pattern
+Business logic that must be reused across modules lives in a module's `services/` as functions that accept a `client` (a pg client already inside `BEGIN`). A workflow opens one transaction and calls services from multiple modules, so the whole operation commits or rolls back together. This is why the module split does **not** prevent cross-module workflows.
 
 ---
 
@@ -17,20 +78,21 @@ This system is designed to be maintained and extended by **non-engineers using C
 - Detailed user stories for the Stash module are in `docs/USER_STORIES.md`
 
 ### Authentication
-- TBD (email/password, Google SSO, etc. — not yet decided)
+- Google OAuth (Passport) with an email allowlist in the `users` table + role-based access.
+- In dev/test (no `GOOGLE_CLIENT_ID` configured, or `NODE_ENV=test`) auth is bypassed with a dev admin user — see `core/auth/authMiddleware.js`.
 
 ---
 
-## Technology Stack (Planned)
+## Technology Stack (As Built)
 
 ### Frontend
-- React / Next.js (TBD)
+- React + Vite (SPA), React Router. Client in `client/`.
 
 ### Backend
-- Node.js API (TBD — framework not yet chosen)
+- Node.js + Express (ES modules). Server in `server/`.
 
 ### Database
-- PostgreSQL
+- PostgreSQL (single shared database — see Architecture & Module Structure above)
 
 ### Containerization
 - Docker + Docker Compose for local development and sandbox environments
@@ -59,8 +121,10 @@ This system is designed to be maintained and extended by **non-engineers using C
 - **E2E Tests (Playwright)** — Simulate real user workflows in a browser (login, add parts, etc.)
 - **Schema/Migration Tests** — Verify database changes don't break existing data
 - **API Contract Tests** — Verify endpoints accept correct inputs and return correct outputs
-- Tests can be run locally: `npx playwright test` (use `--headed` to watch in real time)
-- Tests also run automatically in GitHub Actions on every push
+- Server tests (Jest + Supertest against a real Postgres): `cd server && npm test`. New tests in `server/tests/**/*.test.js` are auto-discovered.
+- E2E tests (Playwright): `npm run test:e2e` (or `npx playwright test`; use `--headed` to watch). Specs in `e2e/tests/`.
+- Always run the server test suite before pushing; run E2E when changing UI or user flows.
+- Tests also run automatically in GitHub Actions on every push.
 
 ### CI/CD Pipeline (GitHub Actions)
 - On every push/PR:
@@ -116,5 +180,7 @@ This system is designed to be maintained and extended by **non-engineers using C
 ---
 
 ## Status
-**Project phase: Planning / Architecture**
-Requirements gathering and architecture decisions are in progress. Nothing has been built yet beyond this document.
+**Project phase: Active development**
+- **Stash** (inventory) is fully built with a comprehensive server + E2E test suite.
+- **Gear** (asset management) is scaffolded: assets CRUD (`/api/gear/assets`), an Assets UI page, and a cross-module `commission-asset` workflow. Extend it with more asset-management features as needed.
+- The codebase is a modular monolith — see **Architecture & Module Structure** above before adding features, especially the "How to add a new module" and "Cross-module workflow pattern" sections.

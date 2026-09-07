@@ -4,16 +4,18 @@ import session from 'express-session';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import pool from './db/connection.js';
-import passport from './auth/passport.js';
-import { requireAuth } from './auth/authMiddleware.js';
-import authRoutes from './auth/authRoutes.js';
-import partsRouter from './routes/parts.js';
-import locationsRouter from './routes/locations.js';
-import suppliersRouter from './routes/suppliers.js';
-import purchaseOrdersRouter from './routes/purchaseOrders.js';
-import inventoryRouter from './routes/inventory.js';
-import dashboardRouter from './routes/dashboard.js';
-import usersRouter from './routes/users.js';
+import passport from './core/auth/passport.js';
+import { requireAuth } from './core/auth/authMiddleware.js';
+import authRoutes from './core/auth/authRoutes.js';
+import usersRouter from './core/users/routes.js';
+import locationsRouter from './core/locations/routes.js';
+import dashboardRouter from './core/dashboard/routes.js';
+import partsRouter from './modules/stash/routes/parts.js';
+import suppliersRouter from './modules/stash/routes/suppliers.js';
+import purchaseOrdersRouter from './modules/stash/routes/purchaseOrders.js';
+import inventoryRouter from './modules/stash/routes/inventory.js';
+import assetsRouter from './modules/gear/routes/assets.js';
+import workflowsRouter from './workflows/routes.js';
 
 const app = express();
 
@@ -50,7 +52,7 @@ app.use('/auth', authRoutes);
 app.get('/api/health', async (req, res) => {
   try {
     await pool.query('SELECT 1');
-    res.json({ status: 'ok', module: 'Stash', version: '0.1.0' });
+    res.json({ status: 'ok', service: 'Backbeat', modules: ['Stash', 'Gear'], version: '0.1.0' });
   } catch (err) {
     res.status(503).json({ status: 'error', message: 'Database unreachable' });
   }
@@ -59,14 +61,22 @@ app.get('/api/health', async (req, res) => {
 // Protect all /api routes
 app.use('/api', requireAuth);
 
-// API routes
-app.use('/api/parts', partsRouter);
-app.use('/api/locations', locationsRouter);
-app.use('/api/suppliers', suppliersRouter);
-app.use('/api/purchase-orders', purchaseOrdersRouter);
-app.use('/api/inventory', inventoryRouter);
-app.use('/api/dashboard', dashboardRouter);
+// Shared / core API routes (not module-specific — used across modules)
 app.use('/api/users', usersRouter);
+app.use('/api/locations', locationsRouter);
+app.use('/api/dashboard', dashboardRouter);
+
+// Stash module API routes (namespaced under /api/stash)
+app.use('/api/stash/parts', partsRouter);
+app.use('/api/stash/suppliers', suppliersRouter);
+app.use('/api/stash/purchase-orders', purchaseOrdersRouter);
+app.use('/api/stash/inventory', inventoryRouter);
+
+// Gear module API routes (namespaced under /api/gear)
+app.use('/api/gear/assets', assetsRouter);
+
+// Cross-module workflows (operations that span more than one module)
+app.use('/api/workflows', workflowsRouter);
 
 // Production: serve built React client
 const __dirname = path.dirname(fileURLToPath(import.meta.url));

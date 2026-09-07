@@ -58,7 +58,7 @@ test.describe('Valuation & Transactions', () => {
 
   test('transactions page shows multiple transaction types after operations', async ({ page }) => {
     // Issue some inventory to create an ISSUE transaction
-    const issueRes = await fetch('http://localhost:3001/api/inventory/issue', {
+    const issueRes = await fetch('http://localhost:3001/api/stash/inventory/issue', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ part_id: part.id, location_id: location.id, quantity: 2, reason: 'Repair' }),

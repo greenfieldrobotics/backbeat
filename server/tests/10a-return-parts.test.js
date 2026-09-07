@@ -14,7 +14,7 @@ describe('Return Parts (Story 5.4)', () => {
   // --- Happy Path ---
 
   test('Return 5 @ $10 — creates FIFO layer, updates inventory, creates audit trail', async () => {
-    const res = await request(app).post('/api/inventory/return').send({
+    const res = await request(app).post('/api/stash/inventory/return').send({
       part_id: part.id,
       location_id: location.id,
       quantity: 5,
@@ -48,7 +48,7 @@ describe('Return Parts (Story 5.4)', () => {
   });
 
   test('Return with reason and reference — stored in audit trail', async () => {
-    const res = await request(app).post('/api/inventory/return').send({
+    const res = await request(app).post('/api/stash/inventory/return').send({
       part_id: part.id,
       location_id: location.id,
       quantity: 3,
@@ -74,7 +74,7 @@ describe('Return Parts (Story 5.4)', () => {
     await receiveInventory({ part, location, supplier, quantity: 10, unitCost: 5.00 });
 
     // Issue all 10
-    await request(app).post('/api/inventory/issue').send({
+    await request(app).post('/api/stash/inventory/issue').send({
       part_id: part.id,
       location_id: location.id,
       quantity: 10,
@@ -85,7 +85,7 @@ describe('Return Parts (Story 5.4)', () => {
     expect(inv0[0].quantity_on_hand).toBe(0);
 
     // Return 5 @ $5 (same cost as original)
-    const res = await request(app).post('/api/inventory/return').send({
+    const res = await request(app).post('/api/stash/inventory/return').send({
       part_id: part.id,
       location_id: location.id,
       quantity: 5,
@@ -122,14 +122,14 @@ describe('Return Parts (Story 5.4)', () => {
     await receiveInventory({ part, location, supplier, quantity: 10, unitCost: 5.00 });
 
     // Issue 5
-    await request(app).post('/api/inventory/issue').send({
+    await request(app).post('/api/stash/inventory/issue').send({
       part_id: part.id,
       location_id: location.id,
       quantity: 5,
     });
 
     // Return 3 @ $8 (different cost)
-    const res = await request(app).post('/api/inventory/return').send({
+    const res = await request(app).post('/api/stash/inventory/return').send({
       part_id: part.id,
       location_id: location.id,
       quantity: 3,
@@ -160,7 +160,7 @@ describe('Return Parts (Story 5.4)', () => {
   });
 
   test('Return without reason or reference succeeds', async () => {
-    const res = await request(app).post('/api/inventory/return').send({
+    const res = await request(app).post('/api/stash/inventory/return').send({
       part_id: part.id,
       location_id: location.id,
       quantity: 2,
@@ -171,7 +171,7 @@ describe('Return Parts (Story 5.4)', () => {
   });
 
   test('Return with zero unit_cost succeeds', async () => {
-    const res = await request(app).post('/api/inventory/return').send({
+    const res = await request(app).post('/api/stash/inventory/return').send({
       part_id: part.id,
       location_id: location.id,
       quantity: 1,
@@ -185,7 +185,7 @@ describe('Return Parts (Story 5.4)', () => {
   // --- Validation ---
 
   test('Missing part_id returns 400', async () => {
-    const res = await request(app).post('/api/inventory/return').send({
+    const res = await request(app).post('/api/stash/inventory/return').send({
       location_id: location.id,
       quantity: 5,
       unit_cost: 10.00,
@@ -194,7 +194,7 @@ describe('Return Parts (Story 5.4)', () => {
   });
 
   test('Missing location_id returns 400', async () => {
-    const res = await request(app).post('/api/inventory/return').send({
+    const res = await request(app).post('/api/stash/inventory/return').send({
       part_id: part.id,
       quantity: 5,
       unit_cost: 10.00,
@@ -203,7 +203,7 @@ describe('Return Parts (Story 5.4)', () => {
   });
 
   test('Missing quantity returns 400', async () => {
-    const res = await request(app).post('/api/inventory/return').send({
+    const res = await request(app).post('/api/stash/inventory/return').send({
       part_id: part.id,
       location_id: location.id,
       unit_cost: 10.00,
@@ -212,7 +212,7 @@ describe('Return Parts (Story 5.4)', () => {
   });
 
   test('Missing unit_cost returns 400', async () => {
-    const res = await request(app).post('/api/inventory/return').send({
+    const res = await request(app).post('/api/stash/inventory/return').send({
       part_id: part.id,
       location_id: location.id,
       quantity: 5,
@@ -221,7 +221,7 @@ describe('Return Parts (Story 5.4)', () => {
   });
 
   test('Zero quantity returns 400', async () => {
-    const res = await request(app).post('/api/inventory/return').send({
+    const res = await request(app).post('/api/stash/inventory/return').send({
       part_id: part.id,
       location_id: location.id,
       quantity: 0,
@@ -231,7 +231,7 @@ describe('Return Parts (Story 5.4)', () => {
   });
 
   test('Negative quantity returns 400', async () => {
-    const res = await request(app).post('/api/inventory/return').send({
+    const res = await request(app).post('/api/stash/inventory/return').send({
       part_id: part.id,
       location_id: location.id,
       quantity: -5,
@@ -241,7 +241,7 @@ describe('Return Parts (Story 5.4)', () => {
   });
 
   test('Negative unit_cost returns 400', async () => {
-    const res = await request(app).post('/api/inventory/return').send({
+    const res = await request(app).post('/api/stash/inventory/return').send({
       part_id: part.id,
       location_id: location.id,
       quantity: 5,
@@ -251,7 +251,7 @@ describe('Return Parts (Story 5.4)', () => {
   });
 
   test('Non-existent part returns 404', async () => {
-    const res = await request(app).post('/api/inventory/return').send({
+    const res = await request(app).post('/api/stash/inventory/return').send({
       part_id: 99999,
       location_id: location.id,
       quantity: 5,
@@ -261,7 +261,7 @@ describe('Return Parts (Story 5.4)', () => {
   });
 
   test('Non-existent location returns 404', async () => {
-    const res = await request(app).post('/api/inventory/return').send({
+    const res = await request(app).post('/api/stash/inventory/return').send({
       part_id: part.id,
       location_id: 99999,
       quantity: 5,
