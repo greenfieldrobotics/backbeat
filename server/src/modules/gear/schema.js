@@ -123,6 +123,59 @@ export async function createGearTables(pool) {
     -- apply on the parent side.
     CREATE UNIQUE INDEX IF NOT EXISTS ux_asset_links_child_open
       ON asset_links (child_asset_id) WHERE valid_to IS NULL;
+
+    -- Work orders / service history per asset (G6.1). Any asset MAY have one opened
+    -- against it regardless of type — the data model is not type-specific — but the
+    -- L3 capability gate (§2.3, supports_maintenance) is enforced in the service
+    -- layer, not here (see maintenanceOrderService.js's assertSupportsMaintenance()),
+    -- the same split assetLinkService.js uses for L2/supports_linking.
+    --
+    -- Deliberately carries no parts-consumed field, column, or JSON blob, on
+    -- purpose. G6.2 (parts consumed) is deferred, not deleted (requirements §7.8):
+    -- its mechanism was reading Stash's inventory transactions, which no longer
+    -- applies now that Stash is on hold, but its principle still binds — whatever
+    -- system holds inventory is the one record of parts consumed, and this table
+    -- must never grow a parallel log to compensate for the missing integration.
+    CREATE TABLE IF NOT EXISTS maintenance_orders (
+      id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+      asset_id INTEGER NOT NULL REFERENCES assets(id),
+      status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'in_progress', 'closed')),
+      description TEXT,
+      opened_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      closed_at TIMESTAMPTZ,
+      actor_user_id INTEGER REFERENCES users(id),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_maintenance_orders_asset_id ON maintenance_orders(asset_id);
+
+    -- Component wear by model (G6.3) — per-installation records against an
+    -- asset_model, never against an asset of the component's own. Blades stay
+    -- inventory (§5.6): a wear part living in dirt and rock strikes cannot carry a
+    -- label that outlives its service life, so per-blade identity is deferred
+    -- (§7.5) and this table never creates an asset row for the installed
+    -- component — it only ever references one (installed_on_asset_id).
+    --
+    -- installed_at_hours/removed_at_hours are the HOST asset's meter-hour reading,
+    -- not a timestamp — the requirement's "at hour Y" is a usage measure, and it is
+    -- the number that actually answers "which design lasts longest" (G6.3), not a
+    -- wall-clock date. removed_at_hours NULL means still installed, the same
+    -- open/closed shape asset_links uses for valid_to.
+    CREATE TABLE IF NOT EXISTS component_installations (
+      id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+      asset_model_id INTEGER NOT NULL REFERENCES asset_models(id),
+      installed_on_asset_id INTEGER NOT NULL REFERENCES assets(id),
+      installed_at_hours NUMERIC NOT NULL,
+      removed_at_hours NUMERIC,
+      condition_on_removal TEXT,
+      actor_user_id INTEGER REFERENCES users(id),
+      notes TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CHECK (removed_at_hours IS NULL OR removed_at_hours >= installed_at_hours)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_component_installations_asset_model_id ON component_installations(asset_model_id);
+    CREATE INDEX IF NOT EXISTS idx_component_installations_installed_on_asset_id ON component_installations(installed_on_asset_id);
   `);
 
   // Migrate `assets` onto the reference tables (Phase 2). Guarded and idempotent —

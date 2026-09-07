@@ -2,7 +2,10 @@
 // Phase 6 introduces; other modules still use the untyped core/api.js (§6.1 / convergence
 // task 7 — the rest of the client converts later).
 import { apiRequest, type ApiResult } from '../../core/httpClient';
-import type { Asset, AssetType, LifecycleState, AssetEvent, AssetInput, AssetLink, AssetLinkInput } from './types';
+import type {
+  Asset, AssetType, LifecycleState, AssetEvent, AssetInput, AssetLink, AssetLinkInput,
+  AssetModel, MaintenanceOrder, MaintenanceOrderInput, ComponentInstallation, ComponentInstallationInput,
+} from './types';
 
 export const gearApi = {
   getAssets: (): Promise<ApiResult<Asset[]>> => apiRequest('/gear/assets'),
@@ -46,4 +49,38 @@ export const gearApi = {
 
   closeLink: (id: number): Promise<ApiResult<AssetLink>> =>
     apiRequest(`/gear/asset-links/${id}/close`, { method: 'PATCH', body: JSON.stringify({}) }),
+
+  getAssetModels: (): Promise<ApiResult<AssetModel[]>> => apiRequest('/gear/asset-models'),
+
+  // An asset's service history (G6.1), newest first.
+  getMaintenanceOrdersForAsset: (assetId: number): Promise<ApiResult<MaintenanceOrder[]>> =>
+    apiRequest(`/gear/assets/${assetId}/maintenance-orders`),
+
+  // Opens a work order. Rejected (400) if the asset's type is not L3/supports_maintenance.
+  createMaintenanceOrder: (data: MaintenanceOrderInput): Promise<ApiResult<MaintenanceOrder>> =>
+    apiRequest('/gear/maintenance-orders', { method: 'POST', body: JSON.stringify(data) }),
+
+  updateMaintenanceOrder: (
+    id: number,
+    data: { status?: MaintenanceOrder['status']; description?: string }
+  ): Promise<ApiResult<MaintenanceOrder>> =>
+    apiRequest(`/gear/maintenance-orders/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+
+  // Components a given asset has hosted (G6.3), current and past.
+  getComponentInstallationsForAsset: (assetId: number): Promise<ApiResult<ComponentInstallation[]>> =>
+    apiRequest(`/gear/assets/${assetId}/component-installations`),
+
+  // Every installation of one model, across every asset it has ever been on — the
+  // "which design lasts longest" comparison.
+  getComponentInstallationsForModel: (modelId: number): Promise<ApiResult<ComponentInstallation[]>> =>
+    apiRequest(`/gear/asset-models/${modelId}/component-installations`),
+
+  createComponentInstallation: (data: ComponentInstallationInput): Promise<ApiResult<ComponentInstallation>> =>
+    apiRequest('/gear/component-installations', { method: 'POST', body: JSON.stringify(data) }),
+
+  removeComponentInstallation: (
+    id: number,
+    data: { removed_at_hours: number; condition_on_removal?: string }
+  ): Promise<ApiResult<ComponentInstallation>> =>
+    apiRequest(`/gear/component-installations/${id}/remove`, { method: 'PATCH', body: JSON.stringify(data) }),
 };
