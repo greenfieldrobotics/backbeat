@@ -11,7 +11,7 @@ export async function createPart(overrides = {}) {
     classification: 'General',
   };
   const body = { ...defaults, ...overrides };
-  const res = await request(app).post('/api/parts').send(body);
+  const res = await request(app).post('/api/stash/parts').send(body);
   if (res.status !== 201) throw new Error(`Failed to create part: ${JSON.stringify(res.body)}`);
   return res.body;
 }
@@ -34,8 +34,20 @@ export async function createSupplier(overrides = {}) {
     name: `SUP-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
   };
   const body = { ...defaults, ...overrides };
-  const res = await request(app).post('/api/suppliers').send(body);
+  const res = await request(app).post('/api/stash/suppliers').send(body);
   if (res.status !== 201) throw new Error(`Failed to create supplier: ${JSON.stringify(res.body)}`);
+  return res.body;
+}
+
+/** Create an asset (Gear module) via API, return the created asset */
+export async function createAsset(overrides = {}) {
+  const defaults = {
+    asset_tag: `AST-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    asset_type: 'Robot',
+  };
+  const body = { ...defaults, ...overrides };
+  const res = await request(app).post('/api/gear/assets').send(body);
+  if (res.status !== 201) throw new Error(`Failed to create asset: ${JSON.stringify(res.body)}`);
   return res.body;
 }
 
@@ -45,7 +57,7 @@ export async function createSupplier(overrides = {}) {
  */
 export async function receiveInventory({ part, location, supplier, quantity, unitCost }) {
   // Create PO
-  const poRes = await request(app).post('/api/purchase-orders').send({
+  const poRes = await request(app).post('/api/stash/purchase-orders').send({
     supplier_id: supplier.id,
     line_items: [{ part_id: part.id, quantity_ordered: quantity, unit_cost: unitCost }],
   });
@@ -53,10 +65,10 @@ export async function receiveInventory({ part, location, supplier, quantity, uni
   const po = poRes.body;
 
   // Set to Ordered
-  await request(app).put(`/api/purchase-orders/${po.id}/status`).send({ status: 'Ordered' });
+  await request(app).put(`/api/stash/purchase-orders/${po.id}/status`).send({ status: 'Ordered' });
 
   // Receive
-  const receiveRes = await request(app).post(`/api/purchase-orders/${po.id}/receive`).send({
+  const receiveRes = await request(app).post(`/api/stash/purchase-orders/${po.id}/receive`).send({
     location_id: location.id,
     items: [{ line_item_id: po.line_items[0].id, quantity_received: quantity }],
   });

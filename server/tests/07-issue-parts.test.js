@@ -16,7 +16,7 @@ describe('Issue Parts', () => {
   test('Issue parts with reason and target_ref', async () => {
     await receiveInventory({ part, location, supplier, quantity: 10, unitCost: 5.00 });
 
-    const res = await request(app).post('/api/inventory/issue').send({
+    const res = await request(app).post('/api/stash/inventory/issue').send({
       part_id: part.id,
       location_id: location.id,
       quantity: 3,
@@ -33,7 +33,7 @@ describe('Issue Parts', () => {
   test('Inventory quantity decreases after issue', async () => {
     await receiveInventory({ part, location, supplier, quantity: 10, unitCost: 5.00 });
 
-    await request(app).post('/api/inventory/issue').send({
+    await request(app).post('/api/stash/inventory/issue').send({
       part_id: part.id,
       location_id: location.id,
       quantity: 3,
@@ -49,7 +49,7 @@ describe('Issue Parts', () => {
   test('Audit trail logged with correct fields', async () => {
     await receiveInventory({ part, location, supplier, quantity: 10, unitCost: 5.00 });
 
-    await request(app).post('/api/inventory/issue').send({
+    await request(app).post('/api/stash/inventory/issue').send({
       part_id: part.id,
       location_id: location.id,
       quantity: 3,
@@ -75,7 +75,7 @@ describe('Issue Parts', () => {
   test('Insufficient inventory returns 400', async () => {
     await receiveInventory({ part, location, supplier, quantity: 5, unitCost: 10.00 });
 
-    const res = await request(app).post('/api/inventory/issue').send({
+    const res = await request(app).post('/api/stash/inventory/issue').send({
       part_id: part.id,
       location_id: location.id,
       quantity: 100,
@@ -85,7 +85,7 @@ describe('Issue Parts', () => {
   });
 
   test('Zero inventory returns 400', async () => {
-    const res = await request(app).post('/api/inventory/issue').send({
+    const res = await request(app).post('/api/stash/inventory/issue').send({
       part_id: part.id,
       location_id: location.id,
       quantity: 1,
@@ -94,7 +94,7 @@ describe('Issue Parts', () => {
   });
 
   test('Non-existent part returns 404', async () => {
-    const res = await request(app).post('/api/inventory/issue').send({
+    const res = await request(app).post('/api/stash/inventory/issue').send({
       part_id: 99999,
       location_id: location.id,
       quantity: 1,
@@ -103,7 +103,7 @@ describe('Issue Parts', () => {
   });
 
   test('Non-existent location returns 404', async () => {
-    const res = await request(app).post('/api/inventory/issue').send({
+    const res = await request(app).post('/api/stash/inventory/issue').send({
       part_id: part.id,
       location_id: 99999,
       quantity: 1,
@@ -112,7 +112,7 @@ describe('Issue Parts', () => {
   });
 
   test('Zero quantity returns 400', async () => {
-    const res = await request(app).post('/api/inventory/issue').send({
+    const res = await request(app).post('/api/stash/inventory/issue').send({
       part_id: part.id,
       location_id: location.id,
       quantity: 0,
@@ -121,7 +121,7 @@ describe('Issue Parts', () => {
   });
 
   test('Negative quantity returns 400', async () => {
-    const res = await request(app).post('/api/inventory/issue').send({
+    const res = await request(app).post('/api/stash/inventory/issue').send({
       part_id: part.id,
       location_id: location.id,
       quantity: -5,
@@ -130,7 +130,7 @@ describe('Issue Parts', () => {
   });
 
   test('Missing part_id returns 400', async () => {
-    const res = await request(app).post('/api/inventory/issue').send({
+    const res = await request(app).post('/api/stash/inventory/issue').send({
       location_id: location.id,
       quantity: 1,
     });
@@ -140,7 +140,7 @@ describe('Issue Parts', () => {
   test('Issue without reason or target_ref succeeds', async () => {
     await receiveInventory({ part, location, supplier, quantity: 10, unitCost: 5.00 });
 
-    const res = await request(app).post('/api/inventory/issue').send({
+    const res = await request(app).post('/api/stash/inventory/issue').send({
       part_id: part.id,
       location_id: location.id,
       quantity: 1,

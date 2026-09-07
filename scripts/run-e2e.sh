@@ -10,7 +10,8 @@
 # 6. Restarts the normal dev server (with full .env including Google OAuth)
 # 7. Re-seeds the dev database + imports BarCloud history
 #
-# Output is automatically logged to /app/e2e-results.log
+# Output is automatically logged to /app/e2e-results.log, and the dev server that
+# cleanup restarts logs to /app/dev-server.log
 # (Not inside test-results/ because Playwright clears that directory each run)
 # Usage: npm run test:e2e [-- playwright args]
 
@@ -18,7 +19,9 @@ set -o pipefail
 
 BACKEND_URL="http://localhost:3001"
 BARCLOUD_CSV="/app/Barcloud-History.csv"
+DEV_SNAPSHOT="/app/server/data/dev-snapshot.sql.gz"
 LOG_FILE="/app/e2e-results.log"
+DEV_SERVER_LOG="/app/dev-server.log"
 
 # Tee all output to log file
 exec > >(tee "$LOG_FILE") 2>&1
@@ -41,16 +44,19 @@ wait_for_backend() {
   return 1
 }
 
-cleanup() {
-  echo ""
-  echo "=== Stopping test server ==="
-  kill $E2E_SERVER_PID 2>/dev/null || true
-  sleep 1
-
-  echo "=== Restarting normal dev server ==="
-  cd /app/server
-  node --env-file=../.env src/index.js &
-  wait_for_backend
+# Put dev data back after the test run truncated it. Prefers the snapshot for the
+# same reason dev-entrypoint.sh does: it is one file, it is fast, and it does not
+# depend on the two gitignored CSVs being present. Restoring runs BEFORE the dev
+# server starts, so the server's initializeDatabase() can add any table created
+# since the snapshot was taken.
+restore_dev_data() {
+  if [ -f "$DEV_SNAPSHOT" ]; then
+    echo "=== Restoring dev database from snapshot ==="
+    PGPASSWORD=backbeat psql -h postgres -U backbeat -d backbeat -q \
+      -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;" > /dev/null
+    gunzip -c "$DEV_SNAPSHOT" | PGPASSWORD=backbeat psql -h postgres -U backbeat -d backbeat -q > /dev/null
+    return
+  fi
 
   echo "=== Re-seeding dev database ==="
   cd /app/server
@@ -61,6 +67,24 @@ cleanup() {
     echo "=== Importing BarCloud history ==="
     node --env-file=../.env src/db/import-barcloud.js "$BARCLOUD_CSV"
   fi
+}
+
+cleanup() {
+  echo ""
+  echo "=== Stopping test server ==="
+  kill $E2E_SERVER_PID 2>/dev/null || true
+  sleep 1
+
+  restore_dev_data
+
+  echo "=== Restarting normal dev server ==="
+  cd /app/server
+  # Redirect this server's output away from the script's stdout. It outlives the
+  # script, so if it inherits the pipe (this script tees into $LOG_FILE) the pipe
+  # never closes and the caller blocks forever after the script has exited — a
+  # scripted or CI invocation hangs instead of seeing the exit code.
+  node --env-file=../.env src/index.js > "$DEV_SERVER_LOG" 2>&1 &
+  wait_for_backend
 
   echo ""
   echo "=== Done (exit code: $E2E_EXIT) ==="
@@ -77,7 +101,11 @@ pkill -f "node.*src/index.js" 2>/dev/null || true
 sleep 1
 
 echo "=== Starting server with auth bypassed ==="
+# The container inherits GOOGLE_* from .env via docker compose, so they must be
+# unset explicitly — otherwise authMiddleware does NOT bypass and every spec
+# stops at the login screen.
 cd /app/server
+env -u GOOGLE_CLIENT_ID -u GOOGLE_CLIENT_SECRET -u GOOGLE_CALLBACK_URL \
 DATABASE_URL=postgres://backbeat:backbeat@postgres:5432/backbeat \
 SESSION_SECRET=backbeat-stash-9f2k7x4m1p8q3w6 \
 CORS_ORIGIN=http://localhost:5173 \

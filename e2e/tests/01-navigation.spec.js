@@ -26,10 +26,13 @@ test.describe('Navigation & page structure', () => {
     await expect(sidebar.getByRole('link', { name: 'Audit Trail' })).toBeVisible();
   });
 
-  test('sidebar shows Backbeat logo and Stash badge', async ({ page }) => {
+  test('sidebar shows Backbeat logo and module sections', async ({ page }) => {
     await page.goto('/');
     await expect(page.locator('.logo h2')).toHaveText('Backbeat');
-    await expect(page.locator('.module-badge')).toHaveText('Stash');
+    // Nav is grouped into module sections (Stash, Gear) plus an Admin section
+    await expect(page.locator('.nav-section-title', { hasText: 'Stash' })).toBeVisible();
+    await expect(page.locator('.nav-section-title', { hasText: 'Gear' })).toBeVisible();
+    await expect(page.locator('nav.sidebar').getByRole('link', { name: 'Assets' })).toBeVisible();
   });
 
   test('Inventory page loads with correct heading and empty state', async ({ page }) => {

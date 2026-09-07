@@ -81,7 +81,7 @@ test.describe('Dashboard / Inventory Overview', () => {
     const part2 = await createTestPart({ cost: 5.00 });
     const locations = await fetch('http://localhost:3001/api/locations').then(r => r.json());
     const loc = locations[0]; // reuse existing warehouse
-    const suppliers = await fetch('http://localhost:3001/api/suppliers').then(r => r.json());
+    const suppliers = await fetch('http://localhost:3001/api/stash/suppliers').then(r => r.json());
     const sup = suppliers[0];
 
     await receiveInventoryViaAPI({
@@ -106,9 +106,9 @@ test.describe('Dashboard / Inventory Overview', () => {
     // Create a PO and leave it in Ordered status (don't receive)
     const part3 = await createTestPart({ cost: 20.00 });
     const locations = await fetch('http://localhost:3001/api/locations').then(r => r.json());
-    const suppliers = await fetch('http://localhost:3001/api/suppliers').then(r => r.json());
+    const suppliers = await fetch('http://localhost:3001/api/stash/suppliers').then(r => r.json());
 
-    const poRes = await fetch('http://localhost:3001/api/purchase-orders', {
+    const poRes = await fetch('http://localhost:3001/api/stash/purchase-orders', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -120,7 +120,7 @@ test.describe('Dashboard / Inventory Overview', () => {
     const po = await poRes.json();
 
     // Mark as Ordered
-    await fetch(`http://localhost:3001/api/purchase-orders/${po.id}/status`, {
+    await fetch(`http://localhost:3001/api/stash/purchase-orders/${po.id}/status`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: 'Ordered' }),

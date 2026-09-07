@@ -15,6 +15,7 @@ export async function truncateAllTables() {
   const p = getPool();
   await p.query(`
     TRUNCATE
+      assets,
       inventory_transactions,
       fifo_layers,
       inventory,

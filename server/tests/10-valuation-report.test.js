@@ -22,7 +22,7 @@ describe('Valuation Report', () => {
     // Part Y at Location 1: 20 @ $2.25
     await receiveInventory({ part: partY, location: loc1, supplier, quantity: 20, unitCost: 2.25 });
 
-    const res = await request(app).get('/api/inventory/valuation');
+    const res = await request(app).get('/api/stash/inventory/valuation');
     expect(res.status).toBe(200);
 
     // Layers
@@ -49,13 +49,13 @@ describe('Valuation Report', () => {
     await receiveInventory({ part: partX, location: loc1, supplier, quantity: 5, unitCost: 10.00 });
 
     // Issue all 5 units
-    await request(app).post('/api/inventory/issue').send({
+    await request(app).post('/api/stash/inventory/issue').send({
       part_id: partX.id,
       location_id: loc1.id,
       quantity: 5,
     });
 
-    const res = await request(app).get('/api/inventory/valuation');
+    const res = await request(app).get('/api/stash/inventory/valuation');
     expect(res.status).toBe(200);
     const partXLayers = res.body.layers.filter(l => l.part_number === 'VAL-X');
     expect(partXLayers.length).toBe(0);
@@ -64,7 +64,7 @@ describe('Valuation Report', () => {
   test('CSV export has correct content-type', async () => {
     await receiveInventory({ part: partX, location: loc1, supplier, quantity: 10, unitCost: 5.00 });
 
-    const res = await request(app).get('/api/inventory/valuation?format=csv');
+    const res = await request(app).get('/api/stash/inventory/valuation?format=csv');
     expect(res.status).toBe(200);
     expect(res.headers['content-type']).toMatch(/text\/csv/);
     expect(res.headers['content-disposition']).toMatch(/filename/);
@@ -73,7 +73,7 @@ describe('Valuation Report', () => {
   test('CSV export has correct header row and grand total', async () => {
     await receiveInventory({ part: partX, location: loc1, supplier, quantity: 10, unitCost: 5.00 });
 
-    const res = await request(app).get('/api/inventory/valuation?format=csv');
+    const res = await request(app).get('/api/stash/inventory/valuation?format=csv');
     const lines = res.text.split('\n');
     expect(lines[0]).toMatch(/Part Number/);
     expect(lines[0]).toMatch(/Unit Cost/);
@@ -87,15 +87,15 @@ describe('Valuation Report', () => {
   test('CSV values match JSON response', async () => {
     await receiveInventory({ part: partX, location: loc1, supplier, quantity: 10, unitCost: 5.00 });
 
-    const jsonRes = await request(app).get('/api/inventory/valuation');
-    const csvRes = await request(app).get('/api/inventory/valuation?format=csv');
+    const jsonRes = await request(app).get('/api/stash/inventory/valuation');
+    const csvRes = await request(app).get('/api/stash/inventory/valuation?format=csv');
 
     expectCost(jsonRes.body.grand_total, 50.00);
     expect(csvRes.text).toMatch(/50\.00/);
   });
 
   test('Empty valuation report (no inventory)', async () => {
-    const res = await request(app).get('/api/inventory/valuation');
+    const res = await request(app).get('/api/stash/inventory/valuation');
     expect(res.status).toBe(200);
     expect(res.body.layers.length).toBe(0);
     expect(res.body.summary.length).toBe(0);

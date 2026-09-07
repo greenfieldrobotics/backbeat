@@ -44,7 +44,7 @@ test.describe('Full lifecycle workflow', () => {
     await expect(page.locator('tbody tr')).toHaveCount(2);
 
     // --- Step 3: Create a supplier via API (no UI for suppliers beyond PO modal) ---
-    const supplierRes = await fetch('http://localhost:3001/api/suppliers', {
+    const supplierRes = await fetch('http://localhost:3001/api/stash/suppliers', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: 'Lifecycle Supplier' }),
@@ -52,7 +52,7 @@ test.describe('Full lifecycle workflow', () => {
     const supplier = await supplierRes.json();
 
     // Get part and location IDs from API
-    const partsRes = await fetch('http://localhost:3001/api/parts');
+    const partsRes = await fetch('http://localhost:3001/api/stash/parts');
     const parts = await partsRes.json();
     const part = parts.find(p => p.part_number === 'LIFE-001');
 

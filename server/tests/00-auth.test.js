@@ -112,7 +112,7 @@ describe('Authentication', () => {
     });
 
     test('API routes are accessible when NODE_ENV=test (parts endpoint)', async () => {
-      const res = await request(app).get('/api/parts');
+      const res = await request(app).get('/api/stash/parts');
       expect(res.status).toBe(200);
     });
   });

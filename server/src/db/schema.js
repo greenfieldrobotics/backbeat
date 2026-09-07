@@ -1,28 +1,22 @@
-// Backbeat / Stash Module - Database Schema
+// Backbeat — database schema orchestrator
 // PostgreSQL
+//
+// This is a modular monolith: ONE database shared by all modules. This file creates
+// the shared/core tables (used across modules) and then delegates to each feature
+// module's own schema. Because everything lives in one database, cross-module
+// relationships (e.g. a Gear asset referencing a shared location) and cross-module
+// workflows (single-transaction operations spanning modules) work directly.
+//
+// To add a module: create modules/<name>/schema.js exporting create<Name>Tables(pool),
+// import it here, and call it inside initializeDatabase() after the core tables.
 
-export async function initializeDatabase(pool) {
+import { createStashTables } from '../modules/stash/schema.js';
+import { createGearTables } from '../modules/gear/schema.js';
+
+// Shared/core tables — owned by no single feature module and referenced across modules.
+async function createCoreTables(pool) {
   await pool.query(`
-    -- Parts catalog
-    CREATE TABLE IF NOT EXISTS parts (
-      id SERIAL PRIMARY KEY,
-      part_number TEXT NOT NULL UNIQUE,
-      description TEXT NOT NULL DEFAULT '',
-      unit_of_measure TEXT NOT NULL DEFAULT 'EA',
-      classification TEXT NOT NULL DEFAULT 'General',
-      cost NUMERIC(12,4),
-      cost_125 NUMERIC(12,4),
-      cost_600 NUMERIC(12,4),
-      mfg_part_number TEXT,
-      manufacturer TEXT,
-      reseller TEXT,
-      reseller_part_number TEXT,
-      notes TEXT,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-
-    -- Stocking locations
+    -- Stocking / physical locations (shared: used by Stash inventory and Gear assets)
     CREATE TABLE IF NOT EXISTS locations (
       id SERIAL PRIMARY KEY,
       name TEXT NOT NULL UNIQUE,
@@ -31,76 +25,7 @@ export async function initializeDatabase(pool) {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
 
-    -- Suppliers
-    CREATE TABLE IF NOT EXISTS suppliers (
-      id SERIAL PRIMARY KEY,
-      name TEXT NOT NULL UNIQUE,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-
-    -- Purchase Orders
-    CREATE TABLE IF NOT EXISTS purchase_orders (
-      id SERIAL PRIMARY KEY,
-      po_number TEXT NOT NULL UNIQUE,
-      supplier_id INTEGER NOT NULL REFERENCES suppliers(id),
-      status TEXT NOT NULL DEFAULT 'Draft' CHECK (status IN ('Draft', 'Ordered', 'Partially Received', 'Closed')),
-      expected_delivery_date TEXT,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-
-    -- PO Line Items
-    CREATE TABLE IF NOT EXISTS po_line_items (
-      id SERIAL PRIMARY KEY,
-      purchase_order_id INTEGER NOT NULL REFERENCES purchase_orders(id),
-      part_id INTEGER NOT NULL REFERENCES parts(id),
-      quantity_ordered INTEGER NOT NULL CHECK (quantity_ordered > 0),
-      quantity_received INTEGER NOT NULL DEFAULT 0 CHECK (quantity_received >= 0),
-      unit_cost NUMERIC(12,4) NOT NULL CHECK (unit_cost >= 0),
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-
-    -- FIFO Cost Layers
-    CREATE TABLE IF NOT EXISTS fifo_layers (
-      id SERIAL PRIMARY KEY,
-      part_id INTEGER NOT NULL REFERENCES parts(id),
-      location_id INTEGER NOT NULL REFERENCES locations(id),
-      source_type TEXT NOT NULL CHECK (source_type IN ('PO_RECEIPT', 'ADJUSTMENT', 'RETURN')),
-      source_ref TEXT,
-      original_qty INTEGER NOT NULL CHECK (original_qty > 0),
-      remaining_qty INTEGER NOT NULL CHECK (remaining_qty >= 0),
-      unit_cost NUMERIC(12,4) NOT NULL CHECK (unit_cost >= 0),
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-
-    -- Inventory summary (denormalized for quick lookups, kept in sync via transactions)
-    CREATE TABLE IF NOT EXISTS inventory (
-      id SERIAL PRIMARY KEY,
-      part_id INTEGER NOT NULL REFERENCES parts(id),
-      location_id INTEGER NOT NULL REFERENCES locations(id),
-      quantity_on_hand INTEGER NOT NULL DEFAULT 0 CHECK (quantity_on_hand >= 0),
-      UNIQUE(part_id, location_id)
-    );
-
-    -- Audit trail for all inventory transactions
-    CREATE TABLE IF NOT EXISTS inventory_transactions (
-      id SERIAL PRIMARY KEY,
-      transaction_type TEXT NOT NULL CHECK (transaction_type IN ('RECEIVE', 'ISSUE', 'MOVE', 'DISPOSE', 'ADJUSTMENT', 'RETURN')),
-      part_id INTEGER NOT NULL REFERENCES parts(id),
-      location_id INTEGER NOT NULL REFERENCES locations(id),
-      to_location_id INTEGER REFERENCES locations(id),
-      quantity INTEGER NOT NULL,
-      unit_cost NUMERIC(12,4),
-      total_cost NUMERIC(12,4),
-      reference_type TEXT,
-      reference_id INTEGER,
-      target_ref TEXT,
-      reason TEXT,
-      fifo_layers_consumed TEXT,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-
-    -- Users (allowlist for authentication)
+    -- Users (allowlist for authentication) — shared identity across all modules
     CREATE TABLE IF NOT EXISTS users (
       id SERIAL PRIMARY KEY,
       google_id TEXT UNIQUE,
@@ -111,13 +36,6 @@ export async function initializeDatabase(pool) {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       last_login_at TIMESTAMPTZ
     );
-
-    -- Indexes for common queries
-    CREATE INDEX IF NOT EXISTS idx_fifo_layers_part_location ON fifo_layers(part_id, location_id, remaining_qty);
-    CREATE INDEX IF NOT EXISTS idx_inventory_part_location ON inventory(part_id, location_id);
-    CREATE INDEX IF NOT EXISTS idx_po_line_items_po ON po_line_items(purchase_order_id);
-    CREATE INDEX IF NOT EXISTS idx_transactions_part ON inventory_transactions(part_id);
-    CREATE INDEX IF NOT EXISTS idx_transactions_created ON inventory_transactions(created_at);
   `);
 
   // Migrate existing databases: expand role constraint and update old 'user' role
@@ -143,6 +61,12 @@ export async function initializeDatabase(pool) {
     );
     console.log('Seeded admin user: nandan.kalle@greenfieldrobotics.com');
   }
+}
 
+export async function initializeDatabase(pool) {
+  // Order matters: core tables first (modules reference them via foreign keys).
+  await createCoreTables(pool);
+  await createStashTables(pool);
+  await createGearTables(pool);
   return pool;
 }

@@ -28,7 +28,7 @@ async function put(path, body) {
 
 /** Create a test part and return the full row */
 export async function createTestPart(overrides = {}) {
-  return post('/parts', {
+  return post('/stash/parts', {
     part_number: `TEST-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
     description: 'E2E Test Part',
     classification: 'General',
@@ -49,7 +49,7 @@ export async function createTestLocation(overrides = {}) {
 
 /** Create a test supplier and return the full row */
 export async function createTestSupplier(overrides = {}) {
-  return post('/suppliers', {
+  return post('/stash/suppliers', {
     name: `Test Supplier ${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
     ...overrides,
   });
@@ -64,17 +64,17 @@ export async function createTestSupplier(overrides = {}) {
  */
 export async function receiveInventoryViaAPI({ partId, locationId, supplierId, qty, unitCost }) {
   // Create PO
-  const po = await post('/purchase-orders', {
+  const po = await post('/stash/purchase-orders', {
     supplier_id: supplierId,
     expected_delivery_date: '2026-12-31',
     line_items: [{ part_id: partId, quantity_ordered: qty, unit_cost: unitCost }],
   });
 
   // Mark as Ordered
-  await put(`/purchase-orders/${po.id}/status`, { status: 'Ordered' });
+  await put(`/stash/purchase-orders/${po.id}/status`, { status: 'Ordered' });
 
   // Receive
-  await post(`/purchase-orders/${po.id}/receive`, {
+  await post(`/stash/purchase-orders/${po.id}/receive`, {
     location_id: locationId,
     items: [{ line_item_id: po.line_items[0].id, quantity_received: qty }],
   });
@@ -98,7 +98,7 @@ export async function selectPart(page, partNumber, container) {
 }
 
 export async function returnPartsViaAPI({ partId, locationId, qty, unitCost, reason, reference }) {
-  return post('/inventory/return', {
+  return post('/stash/inventory/return', {
     part_id: partId,
     location_id: locationId,
     quantity: qty,
