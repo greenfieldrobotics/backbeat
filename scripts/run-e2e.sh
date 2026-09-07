@@ -10,7 +10,8 @@
 # 6. Restarts the normal dev server (with full .env including Google OAuth)
 # 7. Re-seeds the dev database + imports BarCloud history
 #
-# Output is automatically logged to /app/e2e-results.log
+# Output is automatically logged to /app/e2e-results.log, and the dev server that
+# cleanup restarts logs to /app/dev-server.log
 # (Not inside test-results/ because Playwright clears that directory each run)
 # Usage: npm run test:e2e [-- playwright args]
 
@@ -20,6 +21,7 @@ BACKEND_URL="http://localhost:3001"
 BARCLOUD_CSV="/app/Barcloud-History.csv"
 DEV_SNAPSHOT="/app/server/data/dev-snapshot.sql.gz"
 LOG_FILE="/app/e2e-results.log"
+DEV_SERVER_LOG="/app/dev-server.log"
 
 # Tee all output to log file
 exec > >(tee "$LOG_FILE") 2>&1
@@ -77,7 +79,11 @@ cleanup() {
 
   echo "=== Restarting normal dev server ==="
   cd /app/server
-  node --env-file=../.env src/index.js &
+  # Redirect this server's output away from the script's stdout. It outlives the
+  # script, so if it inherits the pipe (this script tees into $LOG_FILE) the pipe
+  # never closes and the caller blocks forever after the script has exited — a
+  # scripted or CI invocation hangs instead of seeing the exit code.
+  node --env-file=../.env src/index.js > "$DEV_SERVER_LOG" 2>&1 &
   wait_for_backend
 
   echo ""
