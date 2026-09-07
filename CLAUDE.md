@@ -64,6 +64,28 @@ App.jsx                  Renders module-grouped sidebar + routes from the regist
 4. **Tests:** add `server/tests/NN-fleet-*.test.js` and `e2e/tests/NN-fleet-*.spec.js` (they're auto-discovered).
 5. **Cross-module logic** goes in `server/src/workflows/` and composes module `services/` inside one transaction — see `workflows/commissionAsset.js`.
 
+### How to promote an existing entity into a Gear asset
+Other modules will build an entity first and recognize its asset nature later. Retrofit is the
+normal path, so it is meant to be cheap. Full requirements in `docs/GEAR_REQUIREMENTS.md` §2.4.
+
+1. Register the asset type with its capability flags.
+2. Add a **nullable** unique asset reference to the entity table.
+3. Backfill one asset per entity row, mapping the entity's natural key to the serial.
+4. Make the reference required; ensure new entity rows always create an asset row.
+5. **Move the cross-cutting columns out.** The entity almost certainly has its own location,
+   status and holder — those now belong to the asset spine. **This is the step that gets
+   skipped, and skipping it is how an entity's location and the spine's location end up
+   disagreeing with nobody noticing. It is not optional.**
+6. Ship a view named after the old table so existing readers don't break; deprecate on a clock.
+7. Start the event stream at the promotion date. Do not manufacture history that doesn't exist.
+
+**Review trigger:** if a new table has a serial or unit identifier, **and** a status, **and** a
+location or holder — it is an asset and must be registered at L0 immediately. L0 is cheap;
+identity becomes expensive to retrofit once labels are physically on equipment.
+
+**House convention for new physical-thing tables:** a natural key, a status, a creation
+timestamp, and a reference to whoever holds it.
+
 ### Cross-module workflow pattern
 Business logic that must be reused across modules lives in a module's `services/` as functions that accept a `client` (a pg client already inside `BEGIN`). A workflow opens one transaction and calls services from multiple modules, so the whole operation commits or rolls back together. This is why the module split does **not** prevent cross-module workflows.
 
@@ -176,6 +198,13 @@ Business logic that must be reused across modules lives in a module's `services/
 - Always create a new branch for changes (never push directly to main)
 - Write tests alongside every new feature
 - Keep AWS-specific code isolated and minimal
+- **Never add a column to the Gear asset spine without the platform owner's explicit
+  approval.** The spine is the asset, asset-type, asset-link and asset-event tables. Every
+  other module references them, so a column added there is expensive to take back. Default to
+  the asset type's own extension table, or to the spine's open `attributes` field if the field
+  has not yet earned a column. A column earns a place on the spine only when **two or more
+  asset types query it**. Platform owner: Nandan. `.github/CODEOWNERS` enforces review on the
+  schema files; this rule is what it is enforcing.
 
 ---
 

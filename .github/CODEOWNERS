@@ -1,0 +1,11 @@
+# Gear's spine schema is platform-owned: the asset, type, link and event tables
+# are referenced by every other module, so a column added here is expensive to
+# take back. See docs/GEAR_REQUIREMENTS.md §9 and the spine rule in CLAUDE.md.
+#
+# Changes to these files require review by the platform owner.
+
+/server/src/db/schema.js              @nhkgreenfield
+/server/src/modules/gear/schema.js    @nhkgreenfield
+
+# The quality gate itself
+/.github/                             @nhkgreenfield
