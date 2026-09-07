@@ -65,7 +65,8 @@ Log in with your Claude Max account when prompted (first time only).
 
 | Command | What it does |
 |---|---|
-| `./scripts/dev.sh` | Start everything, then open Claude Code with no permission prompts |
+| `./scripts/dev.sh` | Start everything, then open Claude Code (Sonnet) with no permission prompts |
+| `./scripts/dev.sh --model opus` | Run the container session on a different model |
 | `./scripts/dev.sh --safe` | Same, but with normal permission prompts |
 | `./scripts/dev.sh --no-claude` | Start the stack only, no Claude session |
 | `./scripts/dev.sh --shell` | Open a plain bash shell instead of Claude |
@@ -91,6 +92,20 @@ docker compose exec -w /app -e IS_SANDBOX=1 backbeat claude --dangerously-skip-p
 ```
 
 Use `./scripts/dev.sh --safe` when you would rather approve each action.
+
+### Which model the container session runs
+
+The script starts Claude on **Sonnet**. The intended division of labour is that
+plans are made in Opus outside the container and carried out by the container
+session, so the executing model does not need to be the expensive one. Override
+per-run with `--model` (`--model opus`, `--model haiku`, or a full model name).
+
+Launching by hand, the model flag goes alongside the sandbox flags:
+
+```bash
+docker compose exec -w /app -e IS_SANDBOX=1 backbeat \
+  claude --model sonnet --dangerously-skip-permissions
+```
 
 **What this does and does not contain.** Prompt-free Claude cannot touch anything
 on your Mac outside the project — no home directory, no SSH keys, no other repos.
