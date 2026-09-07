@@ -136,3 +136,22 @@ export interface AssetTypeLabelSetting {
   asset_type_id: number;
   default_symbology: LabelSymbology;
 }
+
+// Photograph-and-resolve-later (Phase 11, G4.3). occurred_at is when the photo was
+// taken (EXIF, or entered by the user) — omit it to fall back to upload time, the
+// last resort (§7.1). client_key is the idempotency key: a second submission with the
+// same key is a no-op, not a duplicate event. Both are resolved client-side before
+// this is sent — see photoResolve.ts.
+export interface PhotoScanInput {
+  serial: string;
+  occurred_at?: string | null;
+  client_key?: string | null;
+  notes?: string;
+}
+
+export interface PhotoScanResult {
+  asset: Asset;
+  event: AssetEvent;
+  /** true if this client_key had already been submitted — no new event was written. */
+  duplicate: boolean;
+}
