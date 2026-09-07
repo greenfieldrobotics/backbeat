@@ -11,7 +11,7 @@ export default function MovePage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    Promise.all([api.getInventory(), api.getLocations()])
+    Promise.all([api.getInventory(), api.getInventoryLocations()])
       .then(([inv, locs]) => { setInventory(inv); setLocations(locs); })
       .finally(() => setLoading(false));
   }, []);

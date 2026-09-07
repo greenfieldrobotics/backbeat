@@ -2,6 +2,7 @@ import { Router } from 'express';
 import pool from '../../db/connection.js';
 import {
   listLocations,
+  listInventoryLocations,
   getLocation,
   createLocation,
   updateLocation,
@@ -11,7 +12,11 @@ import {
 const router = Router();
 
 // GET /api/locations - List all locations
+// GET /api/locations?inventory_only=true - Controlled storage areas only (Stash's pickers)
 router.get('/', async (req, res) => {
+  if (req.query.inventory_only === 'true') {
+    return res.json(await listInventoryLocations(pool));
+  }
   res.json(await listLocations(pool));
 });
 
@@ -27,10 +32,10 @@ router.get('/:id', async (req, res) => {
 
 // POST /api/locations - Create a location
 router.post('/', async (req, res) => {
-  const { name, type } = req.body;
+  const { name, type, is_inventory_location } = req.body;
 
   try {
-    const location = await createLocation(pool, { name, type });
+    const location = await createLocation(pool, { name, type, is_inventory_location });
     res.status(201).json(location);
   } catch (err) {
     if (!err.status) throw err;
@@ -40,10 +45,10 @@ router.post('/', async (req, res) => {
 
 // PUT /api/locations/:id - Update a location
 router.put('/:id', async (req, res) => {
-  const { name, type } = req.body;
+  const { name, type, is_inventory_location } = req.body;
 
   try {
-    res.json(await updateLocation(pool, req.params.id, { name, type }));
+    res.json(await updateLocation(pool, req.params.id, { name, type, is_inventory_location }));
   } catch (err) {
     if (!err.status) throw err;
     res.status(err.status).json({ error: err.message });

@@ -43,6 +43,9 @@ export const api = {
 
   // Locations
   getLocations: () => request('/locations'),
+  // Controlled storage areas only — what Stash's pickers should offer (G3.1). Gear's
+  // pickers and the admin Locations screen use getLocations() (everything) instead.
+  getInventoryLocations: () => request('/locations?inventory_only=true'),
   createLocation: (data) => request('/locations', { method: 'POST', body: JSON.stringify(data) }),
   updateLocation: (id, data) => request(`/locations/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteLocation: (id) => request(`/locations/${id}`, { method: 'DELETE' }),

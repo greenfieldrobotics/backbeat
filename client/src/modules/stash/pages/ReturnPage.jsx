@@ -11,7 +11,7 @@ export default function ReturnPage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    Promise.all([api.getParts(), api.getLocations()])
+    Promise.all([api.getParts(), api.getInventoryLocations()])
       .then(([p, l]) => { setParts(p); setLocations(l); })
       .finally(() => setLoading(false));
   }, []);

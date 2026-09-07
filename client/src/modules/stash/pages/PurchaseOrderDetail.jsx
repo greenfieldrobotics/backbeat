@@ -12,7 +12,7 @@ export default function PurchaseOrderDetail() {
   const [message, setMessage] = useState(null);
   const [error, setError] = useState('');
 
-  const load = () => Promise.all([api.getPurchaseOrder(id), api.getLocations()])
+  const load = () => Promise.all([api.getPurchaseOrder(id), api.getInventoryLocations()])
     .then(([p, locs]) => { setPo(p); setLocations(locs); })
     .finally(() => setLoading(false));
 
