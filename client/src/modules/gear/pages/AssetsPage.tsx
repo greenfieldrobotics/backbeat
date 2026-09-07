@@ -1,27 +1,41 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../../core/api';
+import { gearApi } from '../api';
+import { isApiFailure } from '../../../core/httpClient';
+import ErrorBoundary from '../components/ErrorBoundary';
+import type { Asset, AssetType, LifecycleState, AssetEvent, AssetInput } from '../types';
 
-const EMPTY = { serial_number: '', asset_type_id: '', lifecycle_state_id: '', location_id: '', notes: '' };
+interface Location {
+  id: number;
+  name: string;
+}
 
-export default function AssetsPage() {
-  const [assets, setAssets] = useState([]);
-  const [assetTypes, setAssetTypes] = useState([]);
-  const [lifecycleStates, setLifecycleStates] = useState([]);
-  const [locations, setLocations] = useState([]);
+const EMPTY: AssetInput = { serial_number: '', asset_type_id: '', lifecycle_state_id: '', location_id: '', notes: '' };
+
+function AssetsPageContent() {
+  const [assets, setAssets] = useState<Asset[]>([]);
+  const [assetTypes, setAssetTypes] = useState<AssetType[]>([]);
+  const [lifecycleStates, setLifecycleStates] = useState<LifecycleState[]>([]);
+  const [locations, setLocations] = useState<Location[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
-  const [editing, setEditing] = useState(null);
-  const [form, setForm] = useState(EMPTY);
+  const [editing, setEditing] = useState<Asset | null>(null);
+  const [form, setForm] = useState<AssetInput>(EMPTY);
   const [error, setError] = useState('');
-  const [historyAsset, setHistoryAsset] = useState(null);
-  const [historyEvents, setHistoryEvents] = useState([]);
+  const [historyAsset, setHistoryAsset] = useState<Asset | null>(null);
+  const [historyEvents, setHistoryEvents] = useState<AssetEvent[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
 
-  const load = () => api.getAssets().then(setAssets).finally(() => setLoading(false));
+  const load = async () => {
+    const result = await gearApi.getAssets();
+    if (!isApiFailure(result)) setAssets(result.data);
+    setLoading(false);
+  };
+
   useEffect(() => {
     load();
-    api.getAssetTypes().then(setAssetTypes);
-    api.getLifecycleStates().then(setLifecycleStates);
+    gearApi.getAssetTypes().then(r => { if (!isApiFailure(r)) setAssetTypes(r.data); });
+    gearApi.getLifecycleStates().then(r => { if (!isApiFailure(r)) setLifecycleStates(r.data); });
     // Locations come from the shared/core module — Gear reuses them, doesn't redefine them.
     api.getLocations().then(setLocations);
   }, []);
@@ -36,7 +50,7 @@ export default function AssetsPage() {
     setError('');
     setShowModal(true);
   };
-  const openEdit = (a) => {
+  const openEdit = (a: Asset) => {
     setEditing(a);
     setForm({
       serial_number: a.serial_number || '',
@@ -51,36 +65,42 @@ export default function AssetsPage() {
 
   const handleSave = async () => {
     setError('');
-    const payload = {
+    const payload: AssetInput = {
       ...form,
       location_id: form.location_id || null,
       asset_type_id: form.asset_type_id || null,
       lifecycle_state_id: form.lifecycle_state_id || null,
     };
-    try {
-      if (editing) await api.updateAsset(editing.id, payload);
-      else await api.createAsset(payload);
-      setShowModal(false);
-      load();
-    } catch (err) { setError(err.message); }
+    const result = editing ? await gearApi.updateAsset(editing.id, payload) : await gearApi.createAsset(payload);
+    if (isApiFailure(result)) {
+      setError(result.error);
+      return;
+    }
+    setShowModal(false);
+    load();
   };
 
-  const handleDelete = async (a) => {
+  const handleDelete = async (a: Asset) => {
     if (!confirm(`Delete asset ${a.serial_number || `#${a.id}`}?`)) return;
-    try { await api.deleteAsset(a.id); load(); }
-    catch (err) { alert(err.message); }
+    const result = await gearApi.deleteAsset(a.id);
+    if (isApiFailure(result)) {
+      alert(result.error);
+      return;
+    }
+    load();
   };
 
-  const openHistory = async (a) => {
+  const openHistory = async (a: Asset) => {
     setHistoryAsset(a);
     setHistoryLoading(true);
-    try { setHistoryEvents(await api.getAssetEvents(a.id)); }
-    finally { setHistoryLoading(false); }
+    const result = await gearApi.getAssetEvents(a.id);
+    if (!isApiFailure(result)) setHistoryEvents(result.data);
+    setHistoryLoading(false);
   };
 
   // A one-line human description of what an event recorded — the raw row is mostly
   // ids, and from_value/to_value only apply to some event types (§6.5 item 2).
-  const describeEvent = (e) => {
+  const describeEvent = (e: AssetEvent) => {
     switch (e.event_type) {
       case 'registered': return `Registered${e.location_name ? ` at ${e.location_name}` : ''}`;
       case 'state_changed': return `${e.from_value ?? '—'} → ${e.to_value ?? '—'}`;
@@ -119,7 +139,7 @@ export default function AssetsPage() {
             </tr>
           ))}
           {assets.length === 0 && (
-            <tr><td colSpan="5" style={{ textAlign: 'center', color: '#888' }}>No assets yet.</td></tr>
+            <tr><td colSpan={5} style={{ textAlign: 'center', color: '#888' }}>No assets yet.</td></tr>
           )}
         </tbody>
       </table>
@@ -131,32 +151,32 @@ export default function AssetsPage() {
             {error && <div className="alert alert-error">{error}</div>}
             <div className="form-group">
               <label>Serial Number</label>
-              <input value={form.serial_number} onChange={e => setForm({...form, serial_number: e.target.value})} />
+              <input value={form.serial_number} onChange={e => setForm({ ...form, serial_number: e.target.value })} />
             </div>
             <div className="form-group">
               <label>Asset Type</label>
-              <select value={form.asset_type_id} onChange={e => setForm({...form, asset_type_id: e.target.value})}>
+              <select value={form.asset_type_id ?? ''} onChange={e => setForm({ ...form, asset_type_id: e.target.value })}>
                 <option value="">— Select —</option>
                 {assetTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
             </div>
             <div className="form-group">
               <label>Status</label>
-              <select value={form.lifecycle_state_id} onChange={e => setForm({...form, lifecycle_state_id: e.target.value})}>
+              <select value={form.lifecycle_state_id ?? ''} onChange={e => setForm({ ...form, lifecycle_state_id: e.target.value })}>
                 <option value="">— Select —</option>
                 {lifecycleStates.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
             </div>
             <div className="form-group">
               <label>Location</label>
-              <select value={form.location_id} onChange={e => setForm({...form, location_id: e.target.value})}>
+              <select value={form.location_id ?? ''} onChange={e => setForm({ ...form, location_id: e.target.value })}>
                 <option value="">— Unassigned —</option>
                 {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
               </select>
             </div>
             <div className="form-group">
               <label>Notes</label>
-              <input value={form.notes} onChange={e => setForm({...form, notes: e.target.value})} />
+              <input value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} />
             </div>
             <div className="modal-actions">
               <button className="btn-secondary" onClick={() => setShowModal(false)}>Cancel</button>
@@ -184,7 +204,7 @@ export default function AssetsPage() {
                     </tr>
                   ))}
                   {historyEvents.length === 0 && (
-                    <tr><td colSpan="3" style={{ textAlign: 'center', color: '#888' }}>No history yet.</td></tr>
+                    <tr><td colSpan={3} style={{ textAlign: 'center', color: '#888' }}>No history yet.</td></tr>
                   )}
                 </tbody>
               </table>
@@ -196,5 +216,13 @@ export default function AssetsPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function AssetsPage() {
+  return (
+    <ErrorBoundary>
+      <AssetsPageContent />
+    </ErrorBoundary>
   );
 }
