@@ -9,6 +9,7 @@ import {
   deleteAsset,
 } from '../services/assetService.js';
 import { getAssetEvents } from '../services/assetEventService.js';
+import { getLinksForAsset } from '../services/assetLinkService.js';
 
 const router = Router();
 
@@ -47,6 +48,20 @@ router.get('/:id/events', async (req, res) => {
   try {
     await getAsset(pool, req.params.id); // 404s if the asset doesn't exist
     res.json(await getAssetEvents(pool, req.params.id));
+  } catch (err) {
+    if (!err.status) throw err;
+    res.status(err.status).json({ error: err.message });
+  }
+});
+
+// GET /api/gear/assets/:id/links - Link history (G5.1), both as parent and as child.
+// GET /api/gear/assets/:id/links?as_of=<timestamp> - The single link (if any) under
+// which this asset was someone's child on that date, closed or still open — "which
+// robot was this VCU in on that date", months later.
+router.get('/:id/links', async (req, res) => {
+  try {
+    await getAsset(pool, req.params.id); // 404s if the asset doesn't exist
+    res.json(await getLinksForAsset(pool, req.params.id, { asOf: req.query.as_of || null }));
   } catch (err) {
     if (!err.status) throw err;
     res.status(err.status).json({ error: err.message });

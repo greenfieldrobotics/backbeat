@@ -2,7 +2,7 @@
 // Phase 6 introduces; other modules still use the untyped core/api.js (§6.1 / convergence
 // task 7 — the rest of the client converts later).
 import { apiRequest, type ApiResult } from '../../core/httpClient';
-import type { Asset, AssetType, LifecycleState, AssetEvent, AssetInput } from './types';
+import type { Asset, AssetType, LifecycleState, AssetEvent, AssetInput, AssetLink, AssetLinkInput } from './types';
 
 export const gearApi = {
   getAssets: (): Promise<ApiResult<Asset[]>> => apiRequest('/gear/assets'),
@@ -29,4 +29,21 @@ export const gearApi = {
   getAssetTypes: (): Promise<ApiResult<AssetType[]>> => apiRequest('/gear/asset-types'),
 
   getLifecycleStates: (): Promise<ApiResult<LifecycleState[]>> => apiRequest('/gear/lifecycle-states'),
+
+  // Scan-to-locate (G3.3). Reuses the general PUT — sending only location_id leaves
+  // every other field at its current value (see updateAsset() in assetService.js) — so
+  // this writes exactly the one `moved` event, nothing else.
+  moveAsset: (id: number, location_id: number): Promise<ApiResult<Asset>> =>
+    apiRequest(`/gear/assets/${id}`, { method: 'PUT', body: JSON.stringify({ location_id }) }),
+
+  // One asset's link history (G5.1), both as parent and as child.
+  getAssetLinks: (id: number, asOf?: string): Promise<ApiResult<AssetLink[]>> =>
+    apiRequest(`/gear/assets/${id}/links${asOf ? `?as_of=${encodeURIComponent(asOf)}` : ''}`),
+
+  // Two-scan linking (G5.2). 409s if the child already has an open link.
+  createLink: (data: AssetLinkInput): Promise<ApiResult<AssetLink>> =>
+    apiRequest('/gear/asset-links', { method: 'POST', body: JSON.stringify(data) }),
+
+  closeLink: (id: number): Promise<ApiResult<AssetLink>> =>
+    apiRequest(`/gear/asset-links/${id}/close`, { method: 'PATCH', body: JSON.stringify({}) }),
 };
