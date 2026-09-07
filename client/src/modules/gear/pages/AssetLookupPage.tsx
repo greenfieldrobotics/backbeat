@@ -1,30 +1,35 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { api } from '../../../core/api';
+import { gearApi } from '../api';
+import { isApiFailure } from '../../../core/httpClient';
+import ErrorBoundary from '../components/ErrorBoundary';
+import type { Asset } from '../types';
 
 // The landing page for a scanned label (G2.2). Reached at /a/:serial — never
 // linked to from the app's own nav, only from a printed/scanned URL. A missing
 // serial is a normal outcome (labels outlive assets), so it renders a plain
 // not-found message rather than an error page (§ "three things that will bite").
-export default function AssetLookupPage() {
-  const { serial } = useParams();
-  const [asset, setAsset] = useState(null);
+function AssetLookupPageContent() {
+  const { serial } = useParams<{ serial: string }>();
+  const [asset, setAsset] = useState<Asset | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!serial) return;
     setLoading(true);
     setNotFound(false);
     setAsset(null);
-    api.getAssetBySerial(serial)
-      .then(setAsset)
-      .catch(() => setNotFound(true))
-      .finally(() => setLoading(false));
+    gearApi.getAssetBySerial(serial).then(result => {
+      if (isApiFailure(result)) setNotFound(true);
+      else setAsset(result.data);
+      setLoading(false);
+    });
   }, [serial]);
 
   if (loading) return <div>Loading...</div>;
 
-  if (notFound) {
+  if (notFound || !asset) {
     return (
       <div>
         <h1>Asset not found</h1>
@@ -49,5 +54,13 @@ export default function AssetLookupPage() {
         </tbody>
       </table>
     </div>
+  );
+}
+
+export default function AssetLookupPage() {
+  return (
+    <ErrorBoundary>
+      <AssetLookupPageContent />
+    </ErrorBoundary>
   );
 }
