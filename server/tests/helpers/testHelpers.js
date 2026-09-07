@@ -39,18 +39,6 @@ export async function createSupplier(overrides = {}) {
   return res.body;
 }
 
-/** Create an asset (Gear module) via API, return the created asset */
-export async function createAsset(overrides = {}) {
-  const defaults = {
-    asset_tag: `AST-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-    asset_type: 'Robot',
-  };
-  const body = { ...defaults, ...overrides };
-  const res = await request(app).post('/api/gear/assets').send(body);
-  if (res.status !== 201) throw new Error(`Failed to create asset: ${JSON.stringify(res.body)}`);
-  return res.body;
-}
-
 /**
  * Full workflow to receive inventory: create PO, order it, and receive.
  * Returns { po, fifoLayer, inventoryRecord }

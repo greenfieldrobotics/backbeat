@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../../core/api';
 
-const ASSET_TYPES = ['Robot', 'Laptop', 'Vehicle', 'Tool', 'General'];
-const STATUSES = ['Available', 'In Use', 'Maintenance', 'Retired'];
-const EMPTY = { asset_tag: '', serial_number: '', asset_type: 'Robot', status: 'Available', location_id: '', notes: '' };
+const EMPTY = { serial_number: '', asset_type_id: '', lifecycle_state_id: '', location_id: '', notes: '' };
 
 export default function AssetsPage() {
   const [assets, setAssets] = useState([]);
+  const [assetTypes, setAssetTypes] = useState([]);
+  const [lifecycleStates, setLifecycleStates] = useState([]);
   const [locations, setLocations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -17,18 +17,28 @@ export default function AssetsPage() {
   const load = () => api.getAssets().then(setAssets).finally(() => setLoading(false));
   useEffect(() => {
     load();
+    api.getAssetTypes().then(setAssetTypes);
+    api.getLifecycleStates().then(setLifecycleStates);
     // Locations come from the shared/core module — Gear reuses them, doesn't redefine them.
     api.getLocations().then(setLocations);
   }, []);
 
-  const openCreate = () => { setEditing(null); setForm(EMPTY); setError(''); setShowModal(true); };
+  // Registration only strictly requires asset_type_id and lifecycle_state_id (§2.3), but a
+  // freshly opened create form defaults lifecycle state to 'Available' so the common case —
+  // register and leave the state alone — behaves the way it did before states were data.
+  const openCreate = () => {
+    setEditing(null);
+    const available = lifecycleStates.find(s => s.name === 'Available');
+    setForm({ ...EMPTY, lifecycle_state_id: available ? String(available.id) : '' });
+    setError('');
+    setShowModal(true);
+  };
   const openEdit = (a) => {
     setEditing(a);
     setForm({
-      asset_tag: a.asset_tag,
       serial_number: a.serial_number || '',
-      asset_type: a.asset_type,
-      status: a.status,
+      asset_type_id: a.asset_type_id || '',
+      lifecycle_state_id: a.lifecycle_state_id || '',
       location_id: a.location_id || '',
       notes: a.notes || '',
     });
@@ -38,7 +48,12 @@ export default function AssetsPage() {
 
   const handleSave = async () => {
     setError('');
-    const payload = { ...form, location_id: form.location_id || null };
+    const payload = {
+      ...form,
+      location_id: form.location_id || null,
+      asset_type_id: form.asset_type_id || null,
+      lifecycle_state_id: form.lifecycle_state_id || null,
+    };
     try {
       if (editing) await api.updateAsset(editing.id, payload);
       else await api.createAsset(payload);
@@ -48,7 +63,7 @@ export default function AssetsPage() {
   };
 
   const handleDelete = async (a) => {
-    if (!confirm(`Delete asset ${a.asset_tag}?`)) return;
+    if (!confirm(`Delete asset ${a.serial_number || `#${a.id}`}?`)) return;
     try { await api.deleteAsset(a.id); load(); }
     catch (err) { alert(err.message); }
   };
@@ -64,15 +79,14 @@ export default function AssetsPage() {
 
       <table>
         <thead>
-          <tr><th>Asset Tag</th><th>Serial</th><th>Type</th><th>Status</th><th>Location</th><th>Actions</th></tr>
+          <tr><th>Serial</th><th>Type</th><th>Status</th><th>Location</th><th>Actions</th></tr>
         </thead>
         <tbody>
           {assets.map(a => (
             <tr key={a.id}>
-              <td><strong>{a.asset_tag}</strong></td>
-              <td>{a.serial_number || '—'}</td>
-              <td>{a.asset_type}</td>
-              <td>{a.status}</td>
+              <td><strong>{a.serial_number || '—'}</strong></td>
+              <td>{a.asset_type_name}</td>
+              <td>{a.lifecycle_state_name}</td>
               <td>{a.location_name || '—'}</td>
               <td>
                 <button className="btn-secondary btn-sm" onClick={() => openEdit(a)}>Edit</button>{' '}
@@ -81,7 +95,7 @@ export default function AssetsPage() {
             </tr>
           ))}
           {assets.length === 0 && (
-            <tr><td colSpan="6" style={{ textAlign: 'center', color: '#888' }}>No assets yet.</td></tr>
+            <tr><td colSpan="5" style={{ textAlign: 'center', color: '#888' }}>No assets yet.</td></tr>
           )}
         </tbody>
       </table>
@@ -92,23 +106,21 @@ export default function AssetsPage() {
             <h2>{editing ? 'Edit Asset' : 'New Asset'}</h2>
             {error && <div className="alert alert-error">{error}</div>}
             <div className="form-group">
-              <label>Asset Tag</label>
-              <input value={form.asset_tag} onChange={e => setForm({...form, asset_tag: e.target.value})} />
-            </div>
-            <div className="form-group">
               <label>Serial Number</label>
               <input value={form.serial_number} onChange={e => setForm({...form, serial_number: e.target.value})} />
             </div>
             <div className="form-group">
               <label>Asset Type</label>
-              <select value={form.asset_type} onChange={e => setForm({...form, asset_type: e.target.value})}>
-                {ASSET_TYPES.map(t => <option key={t}>{t}</option>)}
+              <select value={form.asset_type_id} onChange={e => setForm({...form, asset_type_id: e.target.value})}>
+                <option value="">— Select —</option>
+                {assetTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
             </div>
             <div className="form-group">
               <label>Status</label>
-              <select value={form.status} onChange={e => setForm({...form, status: e.target.value})}>
-                {STATUSES.map(s => <option key={s}>{s}</option>)}
+              <select value={form.lifecycle_state_id} onChange={e => setForm({...form, lifecycle_state_id: e.target.value})}>
+                <option value="">— Select —</option>
+                {lifecycleStates.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
             </div>
             <div className="form-group">

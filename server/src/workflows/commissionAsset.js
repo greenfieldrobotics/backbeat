@@ -13,19 +13,28 @@
 
 import { withTransaction } from '../db/connection.js';
 import { createAsset } from '../modules/gear/services/assetService.js';
+import { getLifecycleStateByName } from '../modules/gear/services/lifecycleStateService.js';
 import { issueParts } from '../modules/stash/services/inventoryService.js';
 
 /**
  * @param {object} input
- * @param {object} input.asset            - asset fields (asset_tag, serial_number, asset_type, location_id, ...)
+ * @param {object} input.asset            - asset fields (serial_number, asset_type_id, lifecycle_state_id, location_id, ...)
  * @param {Array}  [input.consume]        - parts to issue: [{ part_id, location_id, quantity }]
  */
 export async function commissionAsset({ asset, consume = [] }) {
   return withTransaction(async (client) => {
+    // A commissioned asset defaults to 'In Use' rather than the registration default —
+    // resolved by name so nothing here hardcodes the seeded state's id.
+    let lifecycleStateId = asset?.lifecycle_state_id;
+    if (!lifecycleStateId) {
+      const inUse = await getLifecycleStateByName(client, 'In Use');
+      lifecycleStateId = inUse.id;
+    }
+
     // Gear module
     const createdAsset = await createAsset(client, {
       ...asset,
-      status: asset?.status || 'In Use',
+      lifecycle_state_id: lifecycleStateId,
     });
 
     // Stash module — issue each consumed part, referenced back to the new asset
@@ -35,8 +44,8 @@ export async function commissionAsset({ asset, consume = [] }) {
         part_id: line.part_id,
         location_id: line.location_id,
         quantity: line.quantity,
-        reason: `Commissioned asset ${createdAsset.asset_tag}`,
-        target_ref: createdAsset.asset_tag,
+        reason: `Commissioned asset ${createdAsset.serial_number}`,
+        target_ref: createdAsset.serial_number,
         reference_type: 'ASSET',
         reference_id: createdAsset.id,
       });

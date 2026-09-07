@@ -47,6 +47,32 @@ export async function createTestLocation(overrides = {}) {
   });
 }
 
+/**
+ * Create a Gear asset type and return the full row. Unlike lifecycle_states (seeded
+ * once at startup and never truncated between e2e runs, so 'Available'/'In Use'/etc.
+ * are always there to select in the UI), asset_types has no default seed data and
+ * also isn't truncated between runs — so a fixed name would 409 on the second run.
+ * Idempotent: if the name already exists from a prior run, reuse that row instead.
+ */
+export async function createTestAssetType(overrides = {}) {
+  const name = overrides.name || 'Robot';
+  const res = await fetch(`${BASE}/gear/asset-types`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, ...overrides }),
+  });
+  if (res.status === 409) {
+    const list = await (await fetch(`${BASE}/gear/asset-types`)).json();
+    const existing = list.find(t => t.name === name);
+    if (existing) return existing;
+  }
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`POST /gear/asset-types failed (${res.status}): ${text}`);
+  }
+  return res.json();
+}
+
 /** Create a test supplier and return the full row */
 export async function createTestSupplier(overrides = {}) {
   return post('/stash/suppliers', {

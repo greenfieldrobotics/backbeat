@@ -92,6 +92,10 @@ export const api = {
   updateAsset: (id, data) => request(`/gear/assets/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteAsset: (id) => request(`/gear/assets/${id}`, { method: 'DELETE' }),
 
+  // Gear — reference data (asset types, lifecycle states are admin-managed vocabularies)
+  getAssetTypes: () => request('/gear/asset-types'),
+  getLifecycleStates: () => request('/gear/lifecycle-states'),
+
   // Cross-module workflows (span multiple modules in one transaction)
   commissionAsset: (data) => request('/workflows/commission-asset', { method: 'POST', body: JSON.stringify(data) }),
 };
