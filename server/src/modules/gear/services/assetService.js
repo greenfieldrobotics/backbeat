@@ -34,8 +34,14 @@ const SELECT_WITH_JOINS = `
   LEFT JOIN parties cp ON a.custodian_party_id = cp.id
 `;
 
-/** Trim and uppercase on write — the one place this happens (G2.1). Empty/absent -> null. */
-function normalizeSerial(serial_number) {
+/**
+ * Trim and uppercase — the one rule for turning a serial into its stored/lookup
+ * form (G2.1). Exported so the by-serial lookup (Phase 5, label scanning) applies
+ * the exact same rule reads use on write, rather than a second copy that could
+ * drift: a label scanned lowercase or with stray whitespace must still resolve.
+ * Empty/absent -> null.
+ */
+export function normalizeSerial(serial_number) {
   if (serial_number === undefined || serial_number === null) return null;
   const trimmed = String(serial_number).trim();
   return trimmed === '' ? null : trimmed.toUpperCase();
@@ -72,6 +78,20 @@ export async function listAssets(db) {
 
 export async function getAsset(db, id) {
   const rows = await executeSqlStrict(db, `${SELECT_WITH_JOINS} WHERE a.id = $1`, [id]);
+  if (rows.length === 0) throw httpError('Asset not found', 404);
+  return rows[0];
+}
+
+/**
+ * Resolve a scanned label to its asset (G2.2). A missing serial is a normal
+ * outcome — labels outlive assets — so this throws the same 404 shape as
+ * getAsset(), not a distinct error, and the route/UI treat it as a not-found
+ * state rather than a crash.
+ */
+export async function getAssetBySerial(db, serial) {
+  const normalized = normalizeSerial(serial);
+  if (normalized === null) throw httpError('Asset not found', 404);
+  const rows = await executeSqlStrict(db, `${SELECT_WITH_JOINS} WHERE a.serial_number = $1`, [normalized]);
   if (rows.length === 0) throw httpError('Asset not found', 404);
   return rows[0];
 }
