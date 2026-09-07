@@ -63,6 +63,48 @@ for var in GIT_USER_NAME GIT_USER_EMAIL; do
   fi
 done
 
+# --- Helpers -----------------------------------------------------------------
+
+# Confirm the running container was built from a current image.
+# Returns 1 (and explains) when the image is stale.
+check_image_is_current() {
+  local cid image_cmd
+  cid="$(docker compose ps -q backbeat 2>/dev/null)"
+  if [ -z "$cid" ]; then
+    return 0   # Nothing running to check
+  fi
+
+  if docker exec "$cid" test -f /usr/local/bin/dev-entrypoint.sh > /dev/null 2>&1; then
+    return 0
+  fi
+
+  image_cmd="$(docker inspect "$cid" --format '{{join .Config.Cmd " "}}' 2>/dev/null)"
+
+  echo ""
+  echo "ERROR: The container is running a stale image."
+  echo "  /usr/local/bin/dev-entrypoint.sh is missing from it, so startup does nothing:"
+  echo "  no dependency install, no database seeding, no dev servers, and no log output."
+  echo "  The container just idles on '${image_cmd:-bash}' forever."
+  echo ""
+  echo "  This happens when the image was built before dev-entrypoint.sh was added"
+  echo "  to Dockerfile.dev. Rebuild it:"
+  echo ""
+  echo "      ./scripts/dev.sh --rebuild"
+  echo ""
+  return 1
+}
+
+# Has this sandbox been set up before? Used only to pick an honest wait message.
+# Assumes "no" when it cannot tell, so the slow-path warning is never skipped wrongly.
+sandbox_is_provisioned() {
+  local count
+  count="$(docker compose exec -T backbeat sh -c 'ls /app/server/node_modules 2>/dev/null | wc -l' 2>/dev/null | tr -cd '0-9')"
+  case "$count" in
+    '') return 1 ;;
+    *)  [ "$count" -gt 10 ] ;;
+  esac
+}
+
 # --- Start Docker Desktop ----------------------------------------------------
 
 if docker info > /dev/null 2>&1; then
@@ -104,7 +146,15 @@ if [ "$REBUILD" = "yes" ]; then
 fi
 
 echo ""
-if curl -sf "$BACKEND_URL/api/health" > /dev/null 2>&1; then
+if [ "$REBUILD" = "yes" ]; then
+  # A new image alone does not replace an already-running container, so force it
+  ALREADY_UP=no
+  echo "=== Recreating containers on the new image ==="
+  if ! docker compose up -d --force-recreate; then
+    echo "ERROR: docker compose up failed."
+    exit 1
+  fi
+elif curl -sf "$BACKEND_URL/api/health" > /dev/null 2>&1; then
   echo "=== Stack is already up ==="
   ALREADY_UP=yes
 else
@@ -116,12 +166,23 @@ else
   fi
 fi
 
+# The image must carry dev-entrypoint.sh. An image built before that was added to
+# Dockerfile.dev starts a bare `bash` instead: nothing installs, nothing seeds, no
+# dev servers, no log output, and the health check below would never pass.
+if ! check_image_is_current; then
+  exit 1
+fi
+
 # --- Wait for the app to be ready --------------------------------------------
 
 if [ "$ALREADY_UP" = "no" ]; then
   echo ""
   echo "=== Waiting for the app to come up ==="
-  echo "  (First run installs dependencies and seeds the database — this takes a few minutes.)"
+  if sandbox_is_provisioned; then
+    echo "  (Dependencies and database are already in place — this should be quick.)"
+  else
+    echo "  (First run: installing dependencies and seeding the database — a few minutes.)"
+  fi
   echo "  Follow along in another terminal with:  docker compose logs -f backbeat"
   echo -n "  "
 

@@ -145,6 +145,27 @@ cd /app/server && npm test     # Run the test suite
 cd /app/server && npm run seed # Reset the database
 ```
 
+## Troubleshooting
+
+### The app never comes up, and `docker compose logs -f backbeat` shows nothing
+
+The image is stale — it was built before `dev-entrypoint.sh` existed, so the
+container starts a bare `bash` and does nothing: no dependency install, no
+seeding, no dev servers, and therefore no log output at all.
+
+```bash
+./scripts/dev.sh --rebuild
+```
+
+`./scripts/dev.sh` detects this and tells you within a couple of seconds rather
+than waiting for the health check to time out.
+
+Rebuild any time `Dockerfile.dev` or `dev-entrypoint.sh` changes — a new image
+does not replace an already-running container on its own, which is why
+`--rebuild` also passes `--force-recreate`.
+
+---
+
 ## Nuclear Option (full reset)
 
 If something goes wrong and you want to start completely fresh:
