@@ -4,11 +4,13 @@
 // locations). That is allowed: modules share one database, so a read that spans them is
 // a single query, not an integration.
 
+import { executeSqlStrict } from '../../db/connection.js';
+
 /** Stock quantity and FIFO value rolled up by location type. */
 export async function getInventoryByLocationType(db) {
   // Aggregate quantity and value separately, then join — a single grouped query over
   // both inventory and fifo_layers would multiply rows together.
-  const { rows } = await db.query(`
+  return executeSqlStrict(db, `
     SELECT l.type,
            COALESCE(inv.total_qty, 0) AS total_qty,
            COALESCE(val.total_value, 0) AS total_value
@@ -28,12 +30,11 @@ export async function getInventoryByLocationType(db) {
     ) val ON val.type = l.type
     ORDER BY l.type
   `);
-  return rows;
 }
 
 /** Part/location pairs running low — on hand but at or below five units. */
 export async function getLowStockAlerts(db) {
-  const { rows } = await db.query(`
+  return executeSqlStrict(db, `
     SELECT p.part_number, p.description, l.name AS location_name, i.quantity_on_hand
     FROM inventory i
     JOIN parts p ON i.part_id = p.id
@@ -41,12 +42,11 @@ export async function getLowStockAlerts(db) {
     WHERE i.quantity_on_hand <= 5 AND i.quantity_on_hand > 0
     ORDER BY i.quantity_on_hand ASC
   `);
-  return rows;
 }
 
 /** Every non-Closed PO with its line-item totals. */
 export async function getOpenPurchaseOrders(db) {
-  const { rows } = await db.query(`
+  return executeSqlStrict(db, `
     SELECT po.id, po.po_number, po.status, s.name AS supplier_name,
            po.expected_delivery_date,
            COALESCE(SUM(li.quantity_ordered * li.unit_cost), 0) AS total_value,
@@ -59,7 +59,6 @@ export async function getOpenPurchaseOrders(db) {
     GROUP BY po.id, po.po_number, po.status, s.name, po.expected_delivery_date
     ORDER BY po.created_at DESC
   `);
-  return rows;
 }
 
 /** Everything the dashboard page needs, in one call. */
