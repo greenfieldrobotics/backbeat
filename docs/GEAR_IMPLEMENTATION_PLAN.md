@@ -93,8 +93,7 @@ mention.
 ## Phase 0 — Make the quality gate real
 
 **Satisfies:** G7.1 (P0), requirements §9 items 1–3.
-**Blocked on a decision by Nandan** — `CLAUDE.md` forbids changing CI configuration without
-explicit approval, and this phase is entirely CI configuration.
+**Approved by Nandan 2026-09-07. In progress — PR #6.**
 
 Everything after this phase is verified by tests. Right now nothing runs them on a pull
 request: there is no `.github/` directory at all, and `main` is not a protected branch — I
@@ -281,12 +280,14 @@ Two parts, and only the first is code:
    is in the **path**, never a fragment (§6.4).
 2. **A redirect host** — `assets.greenfieldrobotics.com/a/:serial` → the app's current URL.
 
-**Recommendation on where the redirect lives:** not in the Backbeat app. The entire purpose is
-to survive the app moving hosts, and convergence has it leaving Railway for dashboard's
-infrastructure. Put the redirect somewhere host-independent — a DNS-level redirect rule or a
-tiny edge function — so re-platforming the app changes one rule and touches no labels. If the
-redirect lives inside the app, it moves when the app moves, and the constraint in §6.4 is
-unmet while looking met.
+**Decided (Nandan, 2026-09-07): the redirect lives outside the Backbeat app.** The entire
+purpose is to survive the app moving hosts, and convergence has it leaving Railway for
+dashboard's infrastructure. It goes somewhere host-independent — a DNS-level redirect rule or
+a tiny edge function — so re-platforming the app changes one rule and touches no labels. A
+redirect living inside the app moves when the app moves, which leaves the §6.4 constraint
+unmet while appearing met.
+
+Still needed from Nandan: the domain provisioned, and which mechanism hosts the rule.
 
 **This phase needs a domain provisioned and a DNS decision**, which is operational rather than
 code. It is the one P0 story that cannot be completed by a coding session alone; flag it early
@@ -368,8 +369,8 @@ its code is a single route.
 
 | Phase | Decision | Owner |
 |---|---|---|
-| 0 | Approve CI, CODEOWNERS and branch protection — `CLAUDE.md` requires explicit approval for CI changes | Nandan |
-| 5 | Provision the label domain, and choose where the redirect lives (recommendation: outside the app) | Nandan |
+| 0 | ~~Approve CI, CODEOWNERS and branch protection~~ — **approved 2026-09-07**, PR #6 | Nandan |
+| 5 | Provision the label domain and choose the mechanism. **Decided 2026-09-07: the redirect lives outside the app** | Nandan |
 | 7 | Budget and order a label media test batch | Nandan / procurement |
 | 11 | Nothing — but §7.3's trigger should be confirmed as still unmet before starting it | — |
 
