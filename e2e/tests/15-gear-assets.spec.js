@@ -1,9 +1,16 @@
 import { test, expect } from '@playwright/test';
 import { truncateAllTables, closePool } from '../helpers/db.js';
+import { createTestAssetType } from '../helpers/api-setup.js';
 
+// Phase 2 renamed the asset's identity field (asset_tag -> serial_number, now the
+// only identity field — there is no more separate "Asset Tag") and replaced the
+// free-text Asset Type field with a select backed by /api/gear/asset-types.
 test.describe('Gear — Assets CRUD', () => {
   test.beforeAll(async () => {
     await truncateAllTables();
+    // asset_types has no default seed data (unlike lifecycle_states), so the type
+    // this suite selects in the UI has to exist first.
+    await createTestAssetType({ name: 'Robot' });
   });
 
   test.afterAll(async () => {
@@ -20,17 +27,15 @@ test.describe('Gear — Assets CRUD', () => {
     await modal.waitFor({ state: 'visible' });
     await expect(modal.locator('h2')).toHaveText('New Asset');
 
-    await modal.locator('.form-group').filter({ hasText: 'Asset Tag' }).locator('input').fill('ROBOT-001');
-    await modal.locator('.form-group').filter({ hasText: 'Serial Number' }).locator('input').fill('SN-ABC-123');
-    await modal.locator('.form-group').filter({ hasText: 'Asset Type' }).locator('select').selectOption('Robot');
+    await modal.locator('.form-group').filter({ hasText: 'Serial Number' }).locator('input').fill('ROBOT-001');
+    await modal.locator('.form-group').filter({ hasText: 'Asset Type' }).locator('select').selectOption({ label: 'Robot' });
 
     await modal.getByRole('button', { name: 'Save' }).click();
     await modal.waitFor({ state: 'hidden' });
 
     const row = page.locator('tbody tr').filter({ hasText: 'ROBOT-001' });
-    await expect(row).toContainText('SN-ABC-123');
     await expect(row).toContainText('Robot');
-    await expect(row).toContainText('Available');
+    await expect(row).toContainText('Available'); // the create form defaults Status to Available
   });
 
   test('edit an asset status', async ({ page }) => {
@@ -42,20 +47,21 @@ test.describe('Gear — Assets CRUD', () => {
     await modal.waitFor({ state: 'visible' });
     await expect(modal.locator('h2')).toHaveText('Edit Asset');
 
-    await modal.locator('.form-group').filter({ hasText: 'Status' }).locator('select').selectOption('In Use');
+    await modal.locator('.form-group').filter({ hasText: 'Status' }).locator('select').selectOption({ label: 'In Use' });
     await modal.getByRole('button', { name: 'Save' }).click();
     await modal.waitFor({ state: 'hidden' });
 
     await expect(page.locator('tbody tr').filter({ hasText: 'ROBOT-001' })).toContainText('In Use');
   });
 
-  test('duplicate asset tag shows error', async ({ page }) => {
+  test('duplicate serial number shows error', async ({ page }) => {
     await page.goto('/gear/assets');
     await page.getByRole('button', { name: 'Add Asset' }).click();
 
     const modal = page.locator('.modal');
     await modal.waitFor({ state: 'visible' });
-    await modal.locator('.form-group').filter({ hasText: 'Asset Tag' }).locator('input').fill('ROBOT-001');
+    await modal.locator('.form-group').filter({ hasText: 'Serial Number' }).locator('input').fill('ROBOT-001');
+    await modal.locator('.form-group').filter({ hasText: 'Asset Type' }).locator('select').selectOption({ label: 'Robot' });
     await modal.getByRole('button', { name: 'Save' }).click();
 
     await expect(modal.locator('.alert-error')).toBeVisible();

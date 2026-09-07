@@ -188,18 +188,34 @@ try {
 
   // --- Seed sample Gear assets (asset management module) ---
   // location_id references the shared/core locations seeded above (cross-module link).
+  // asset_type_id/lifecycle_state_id are Phase 2's FK replacements for the old
+  // free-text asset_type/status columns — lifecycle_states is already seeded by
+  // initializeDatabase() above, but asset_types has no default seed, so the sample
+  // types this data needs are seeded here first.
+  const sampleAssetTypeNames = ['Robot', 'Laptop', 'Vehicle'];
+  for (const name of sampleAssetTypeNames) {
+    await seedClient.query(
+      'INSERT INTO asset_types (name) VALUES ($1) ON CONFLICT (name) DO NOTHING',
+      [name]
+    );
+  }
+  const { rows: assetTypeRows } = await seedClient.query('SELECT id, name FROM asset_types');
+  const assetTypeIdByName = Object.fromEntries(assetTypeRows.map(r => [r.name, r.id]));
+  const { rows: lifecycleStateRows } = await seedClient.query('SELECT id, name FROM lifecycle_states');
+  const lifecycleStateIdByName = Object.fromEntries(lifecycleStateRows.map(r => [r.name, r.id]));
+
   const sampleAssets = [
-    ['ROBOT-001', 'SN-RB-1001', 'Robot', 'In Use', 'Main Warehouse'],
-    ['ROBOT-002', 'SN-RB-1002', 'Robot', 'Available', 'Kansas Regional'],
-    ['LAPTOP-014', 'SN-LT-2014', 'Laptop', 'In Use', 'Main Warehouse'],
-    ['TRUCK-003', 'SN-VH-3003', 'Vehicle', 'Maintenance', 'Texas Regional'],
+    ['SN-RB-1001', 'Robot', 'In Use', 'Main Warehouse'],
+    ['SN-RB-1002', 'Robot', 'Available', 'Kansas Regional'],
+    ['SN-LT-2014', 'Laptop', 'In Use', 'Main Warehouse'],
+    ['SN-VH-3003', 'Vehicle', 'Maintenance', 'Texas Regional'],
   ];
-  for (const [tag, serial, type, status, locName] of sampleAssets) {
+  for (const [serial, type, state, locName] of sampleAssets) {
     await seedClient.query(`
-      INSERT INTO assets (asset_tag, serial_number, asset_type, status, location_id)
-      VALUES ($1, $2, $3, $4, (SELECT id FROM locations WHERE name = $5))
-      ON CONFLICT (asset_tag) DO NOTHING
-    `, [tag, serial, type, status, locName]);
+      INSERT INTO assets (serial_number, asset_type_id, lifecycle_state_id, location_id)
+      VALUES ($1, $2, $3, (SELECT id FROM locations WHERE name = $4))
+      ON CONFLICT (serial_number) WHERE serial_number IS NOT NULL DO NOTHING
+    `, [serial, assetTypeIdByName[type], lifecycleStateIdByName[state], locName]);
   }
 
   await seedClient.query('COMMIT');

@@ -18,6 +18,13 @@ export async function getLifecycleState(db, id) {
   return rows[0];
 }
 
+/** Used by commissionAsset to resolve the 'In Use' state without hardcoding an id. */
+export async function getLifecycleStateByName(db, name) {
+  const rows = await executeSqlStrict(db, 'SELECT * FROM lifecycle_states WHERE name = $1', [name]);
+  if (rows.length === 0) throw httpError(`Lifecycle state '${name}' not found`, 404);
+  return rows[0];
+}
+
 export async function createLifecycleState(db, {
   name,
   sort_order = 0,

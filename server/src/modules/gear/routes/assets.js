@@ -27,8 +27,16 @@ router.get('/:id', async (req, res) => {
 
 // POST /api/gear/assets - Create an asset
 router.post('/', async (req, res) => {
+  const {
+    serial_number, asset_type_id, lifecycle_state_id, model_id, location_id,
+    owner_party_id, custodian_party_id, acquired_at, disposed_at, attributes, notes,
+  } = req.body;
+
   try {
-    const asset = await createAsset(pool, req.body);
+    const asset = await createAsset(pool, {
+      serial_number, asset_type_id, lifecycle_state_id, model_id, location_id,
+      owner_party_id, custodian_party_id, acquired_at, disposed_at, attributes, notes,
+    });
     res.status(201).json(asset);
   } catch (err) {
     res.status(err.status || 400).json({ error: err.message });
@@ -37,8 +45,16 @@ router.post('/', async (req, res) => {
 
 // PUT /api/gear/assets/:id - Update an asset
 router.put('/:id', async (req, res) => {
+  const {
+    serial_number, asset_type_id, lifecycle_state_id, model_id, location_id,
+    owner_party_id, custodian_party_id, acquired_at, disposed_at, attributes, notes,
+  } = req.body;
+
   try {
-    res.json(await updateAsset(pool, req.params.id, req.body));
+    res.json(await updateAsset(pool, req.params.id, {
+      serial_number, asset_type_id, lifecycle_state_id, model_id, location_id,
+      owner_party_id, custodian_party_id, acquired_at, disposed_at, attributes, notes,
+    }));
   } catch (err) {
     res.status(err.status || 400).json({ error: err.message });
   }
