@@ -20,6 +20,7 @@ import assetsRouter from './modules/gear/routes/assets.js';
 import assetTypesRouter from './modules/gear/routes/assetTypes.js';
 import lifecycleStatesRouter from './modules/gear/routes/lifecycleStates.js';
 import assetModelsRouter from './modules/gear/routes/assetModels.js';
+import assetLinksRouter from './modules/gear/routes/assetLinks.js';
 import workflowsRouter from './workflows/routes.js';
 
 const app = express();
@@ -83,6 +84,7 @@ app.use('/api/gear/assets', assetsRouter);
 app.use('/api/gear/asset-types', assetTypesRouter);
 app.use('/api/gear/lifecycle-states', lifecycleStatesRouter);
 app.use('/api/gear/asset-models', assetModelsRouter);
+app.use('/api/gear/asset-links', assetLinksRouter);
 
 // Cross-module workflows (operations that span more than one module)
 app.use('/api/workflows', workflowsRouter);

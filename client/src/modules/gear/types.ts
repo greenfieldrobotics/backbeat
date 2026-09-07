@@ -39,3 +39,26 @@ export interface AssetInput {
   location_id: number | string | null;
   notes: string;
 }
+
+// A dated parent/child edge (G5.1) — battery-in-robot, robot-on-trailer,
+// RTK-base-serving-field all use this same shape, distinguished only by link_type.
+export interface AssetLink {
+  id: number;
+  parent_asset_id: number;
+  parent_serial_number: string | null;
+  parent_asset_type_name: string;
+  child_asset_id: number;
+  child_serial_number: string | null;
+  child_asset_type_name: string;
+  link_type: string;
+  valid_from: string;
+  valid_to: string | null;
+  notes: string | null;
+}
+
+export interface AssetLinkInput {
+  parent_asset_id: number;
+  child_asset_id: number;
+  link_type: string;
+  notes?: string;
+}

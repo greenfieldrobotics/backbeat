@@ -83,6 +83,46 @@ export async function createGearTables(pool) {
 
     CREATE INDEX IF NOT EXISTS idx_asset_events_asset_id ON asset_events(asset_id);
     CREATE INDEX IF NOT EXISTS idx_asset_events_occurred_at ON asset_events(occurred_at);
+
+    -- Time-bounded parent/child edges between assets (G5.1, G5.2) — dated, never a
+    -- column on either asset, because batteries and VCUs move and a column only ever
+    -- holds the current value. One relationship type covers battery-in-robot,
+    -- robot-on-trailer and RTK-base-serving-field alike: a new use case is a new
+    -- link_type value, never a schema change.
+    --
+    -- valid_from doubles as "when this link actually began" (what an occurred_at
+    -- column would otherwise hold) — see assetLinkService.js's module comment for why
+    -- a separate column would carry no distinct information here. created_at is the
+    -- system-heard-about-it time, kept separate from valid_from for the same reason
+    -- asset_events splits occurred_at from created_at (§6.5 item 1); the two are equal
+    -- until offline capture (deferred, §7.1) exists.
+    CREATE TABLE IF NOT EXISTS asset_links (
+      id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+      parent_asset_id INTEGER NOT NULL REFERENCES assets(id),
+      child_asset_id INTEGER NOT NULL REFERENCES assets(id),
+      link_type TEXT NOT NULL,
+      valid_from TIMESTAMPTZ NOT NULL,
+      valid_to TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      actor_user_id INTEGER REFERENCES users(id),
+      notes TEXT,
+      CHECK (parent_asset_id != child_asset_id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_asset_links_parent_asset_id ON asset_links(parent_asset_id);
+    CREATE INDEX IF NOT EXISTS idx_asset_links_child_asset_id ON asset_links(child_asset_id);
+
+    -- "No overlapping active links" (G5.1) is exactly what a Postgres EXCLUDE
+    -- constraint is for, and exactly what SQL Server cannot express at all (§6.2) — so
+    -- no EXCLUDE constraint. The rule is enforced in the service layer (a clean 409
+    -- when a child already has an open link) with this partial unique index as the
+    -- backstop, so a race between two requests that both pass the service check before
+    -- either commits still can't leave two open rows for one child. Scoped to
+    -- child_asset_id only, deliberately: a parent MAY have several simultaneously-open
+    -- children (a robot can carry a battery AND a VCU at once), so uniqueness must not
+    -- apply on the parent side.
+    CREATE UNIQUE INDEX IF NOT EXISTS ux_asset_links_child_open
+      ON asset_links (child_asset_id) WHERE valid_to IS NULL;
   `);
 
   // Migrate `assets` onto the reference tables (Phase 2). Guarded and idempotent —
