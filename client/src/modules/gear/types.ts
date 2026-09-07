@@ -109,3 +109,30 @@ export interface ComponentInstallationInput {
   installed_at_hours: number;
   notes?: string;
 }
+
+// Label generation (Phase 7, G2.4). symbology is data-driven per asset type
+// (asset_type_label_settings), never a hardcoded client-side switch — this type is
+// just the two values the server currently supports.
+export type LabelSymbology = 'qr' | 'datamatrix';
+
+// The barcode SVG is rendered entirely server-side (bwip-js, self-hosted — see
+// labelService.js) and carries no human-readable text node; the client displays
+// serial_number alongside it separately (G2.4's "always printed alongside" rule).
+export interface AssetLabel {
+  asset_id: number;
+  serial_number: string;
+  asset_type_name: string | null;
+  symbology: LabelSymbology;
+  url: string;
+  svg: string;
+}
+
+export interface LabelBatchResult {
+  labels: AssetLabel[];
+  errors: { asset_id: number; error: string }[];
+}
+
+export interface AssetTypeLabelSetting {
+  asset_type_id: number;
+  default_symbology: LabelSymbology;
+}

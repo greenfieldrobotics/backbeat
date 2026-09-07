@@ -204,6 +204,18 @@ try {
   const { rows: lifecycleStateRows } = await seedClient.query('SELECT id, name FROM lifecycle_states');
   const lifecycleStateIdByName = Object.fromEntries(lifecycleStateRows.map(r => [r.name, r.id]));
 
+  // Default label symbology per sample type (Phase 7, G2.4) — demonstrates the
+  // data-driven mapping with real seed data rather than a hardcoded switch: Laptop
+  // stands in for "small electronics" (DataMatrix); Robot/Vehicle get QR (large
+  // surface, phone-camera friendly).
+  const labelSymbologyByTypeName = { Robot: 'qr', Vehicle: 'qr', Laptop: 'datamatrix' };
+  for (const [name, symbology] of Object.entries(labelSymbologyByTypeName)) {
+    await seedClient.query(
+      'INSERT INTO asset_type_label_settings (asset_type_id, default_symbology) VALUES ($1, $2) ON CONFLICT (asset_type_id) DO NOTHING',
+      [assetTypeIdByName[name], symbology]
+    );
+  }
+
   const sampleAssets = [
     ['SN-RB-1001', 'Robot', 'In Use', 'Main Warehouse'],
     ['SN-RB-1002', 'Robot', 'Available', 'Kansas Regional'],

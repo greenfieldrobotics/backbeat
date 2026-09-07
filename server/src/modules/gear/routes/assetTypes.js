@@ -7,6 +7,7 @@ import {
   updateAssetType,
   deleteAssetType,
 } from '../services/assetTypeService.js';
+import { getLabelSetting, setDefaultSymbology } from '../services/labelService.js';
 
 const router = Router();
 
@@ -48,6 +49,29 @@ router.put('/:id', async (req, res) => {
     res.json(await updateAssetType(pool, req.params.id, {
       name, description, supports_location, supports_linking, supports_maintenance, active,
     }));
+  } catch (err) {
+    if (!err.status) throw err;
+    res.status(err.status).json({ error: err.message });
+  }
+});
+
+// GET /api/gear/asset-types/:id/label-setting - default label symbology for this
+// type (G2.4). Data, not a hardcoded per-type switch — see labelService.js.
+router.get('/:id/label-setting', async (req, res) => {
+  try {
+    res.json(await getLabelSetting(pool, req.params.id));
+  } catch (err) {
+    if (!err.status) throw err;
+    res.status(err.status).json({ error: err.message });
+  }
+});
+
+// PUT /api/gear/asset-types/:id/label-setting - set this type's default label
+// symbology. Deliberately its own satellite table, not a column on asset_types
+// (CLAUDE.md forbids a spine column without the platform owner's approval).
+router.put('/:id/label-setting', async (req, res) => {
+  try {
+    res.json(await setDefaultSymbology(pool, req.params.id, req.body.default_symbology));
   } catch (err) {
     if (!err.status) throw err;
     res.status(err.status).json({ error: err.message });

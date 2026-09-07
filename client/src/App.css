@@ -423,3 +423,59 @@ a.table-link:hover { text-decoration: underline; }
 .part-search-option.highlighted strong {
   color: var(--color-white);
 }
+
+/* Labels (Phase 7, G2.4) — single-preview card and the print-sheet grid share the
+   same card shape so a preview looks like what will actually print. */
+.label-card {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  background: var(--color-white);
+}
+
+.label-card svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.label-serial {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 0.85rem;
+  letter-spacing: 0.02em;
+}
+
+.label-sheet {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+
+/* Print-to-PDF (Phase 7, G2.4): hide app chrome and any explicitly-marked controls,
+   and let the label grid alone occupy the printed page. */
+@media print {
+  .sidebar,
+  .no-print {
+    display: none !important;
+  }
+
+  .content {
+    padding: 0;
+    max-width: none;
+  }
+
+  .label-sheet {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .label-card {
+    break-inside: avoid;
+    border: 1px dashed #999;
+    box-shadow: none;
+  }
+}

@@ -23,6 +23,7 @@ import assetModelsRouter from './modules/gear/routes/assetModels.js';
 import assetLinksRouter from './modules/gear/routes/assetLinks.js';
 import maintenanceOrdersRouter from './modules/gear/routes/maintenanceOrders.js';
 import componentInstallationsRouter from './modules/gear/routes/componentInstallations.js';
+import labelsRouter from './modules/gear/routes/labels.js';
 import workflowsRouter from './workflows/routes.js';
 
 const app = express();
@@ -89,6 +90,7 @@ app.use('/api/gear/asset-models', assetModelsRouter);
 app.use('/api/gear/asset-links', assetLinksRouter);
 app.use('/api/gear/maintenance-orders', maintenanceOrdersRouter);
 app.use('/api/gear/component-installations', componentInstallationsRouter);
+app.use('/api/gear/labels', labelsRouter);
 
 // Cross-module workflows (operations that span more than one module)
 app.use('/api/workflows', workflowsRouter);
