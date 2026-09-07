@@ -62,6 +62,11 @@ jobs:
       - name: Typecheck
         working-directory: client
         run: npm run typecheck --if-present
+      # --if-present so this activates on its own when the Gear frontend phase adds
+      # the vitest script; component tests are ungated until then.
+      - name: Component tests
+        working-directory: client
+        run: npm test --if-present
       - name: Build
         working-directory: client
         run: npm run build
