@@ -37,6 +37,19 @@ export async function createGearTables(pool) {
       active BOOLEAN NOT NULL DEFAULT true
     );
 
+    -- Per-asset-type default label symbology (G2.4) — a satellite table keyed by
+    -- asset_type_id, deliberately NOT a column on asset_types. asset_types is one of
+    -- the four spine tables CLAUDE.md forbids adding a column to without the platform
+    -- owner's explicit approval; this table references the spine via a foreign key
+    -- the same way asset_models/maintenance_orders/component_installations already do,
+    -- without becoming part of it. A missing row means "not yet configured", not an
+    -- error — labelService.js falls back to 'qr' — so every asset type that predates
+    -- this table (every one of them, today) keeps working unmodified.
+    CREATE TABLE IF NOT EXISTS asset_type_label_settings (
+      asset_type_id INTEGER PRIMARY KEY REFERENCES asset_types(id),
+      default_symbology TEXT NOT NULL DEFAULT 'qr' CHECK (default_symbology IN ('qr', 'datamatrix'))
+    );
+
     -- Lifecycle states as data (G1.3) — extending the vocabulary is an admin
     -- action, not a migration.
     CREATE TABLE IF NOT EXISTS lifecycle_states (

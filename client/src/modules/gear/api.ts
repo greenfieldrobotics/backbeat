@@ -5,6 +5,7 @@ import { apiRequest, type ApiResult } from '../../core/httpClient';
 import type {
   Asset, AssetType, LifecycleState, AssetEvent, AssetInput, AssetLink, AssetLinkInput,
   AssetModel, MaintenanceOrder, MaintenanceOrderInput, ComponentInstallation, ComponentInstallationInput,
+  AssetLabel, LabelBatchResult, LabelSymbology, AssetTypeLabelSetting,
 } from './types';
 
 export const gearApi = {
@@ -83,4 +84,24 @@ export const gearApi = {
     data: { removed_at_hours: number; condition_on_removal?: string }
   ): Promise<ApiResult<ComponentInstallation>> =>
     apiRequest(`/gear/component-installations/${id}/remove`, { method: 'PATCH', body: JSON.stringify(data) }),
+
+  // One asset's label (Phase 7, G2.4). symbology, if given, overrides the asset
+  // type's configured default — a battery label may go either way depending on
+  // available flat area.
+  getAssetLabel: (assetId: number, symbology?: LabelSymbology): Promise<ApiResult<AssetLabel>> =>
+    apiRequest(`/gear/labels/${assetId}${symbology ? `?symbology=${symbology}` : ''}`),
+
+  // A batch of labels for a print sheet. Per-asset failures (no serial, unknown id)
+  // come back in `errors` rather than failing the whole sheet.
+  getAssetLabels: (assetIds: number[], symbology?: LabelSymbology): Promise<ApiResult<LabelBatchResult>> =>
+    apiRequest(`/gear/labels?ids=${assetIds.join(',')}${symbology ? `&symbology=${symbology}` : ''}`),
+
+  getLabelSetting: (assetTypeId: number): Promise<ApiResult<AssetTypeLabelSetting>> =>
+    apiRequest(`/gear/asset-types/${assetTypeId}/label-setting`),
+
+  setLabelSetting: (assetTypeId: number, default_symbology: LabelSymbology): Promise<ApiResult<AssetTypeLabelSetting>> =>
+    apiRequest(`/gear/asset-types/${assetTypeId}/label-setting`, {
+      method: 'PUT',
+      body: JSON.stringify({ default_symbology }),
+    }),
 };
