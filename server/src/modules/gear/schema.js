@@ -58,6 +58,31 @@ export async function createGearTables(pool) {
       active BOOLEAN NOT NULL DEFAULT true,
       UNIQUE (manufacturer, model_name)
     );
+
+    -- Event stream (G3.2) — append-only history of what happened to an asset and
+    -- when we heard about it. occurred_at and created_at are separate columns on
+    -- purpose (requirements §6.5 item 1): they are equal for the entire online-only
+    -- era and stay two columns so offline capture (deferred, §7.1) has somewhere to
+    -- put a real "when it happened" without retroactively rewriting created_at.
+    -- from_value/to_value are text, not ids: lifecycle states (and parties) can be
+    -- renamed or deactivated, and an event recording a name stays true forever where
+    -- one recording an id would become unreadable the day that row changes.
+    CREATE TABLE IF NOT EXISTS asset_events (
+      id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+      asset_id INTEGER NOT NULL REFERENCES assets(id),
+      event_type TEXT NOT NULL CHECK (event_type IN ('registered', 'moved', 'custody_changed', 'state_changed', 'note')),
+      occurred_at TIMESTAMPTZ NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      location_id INTEGER REFERENCES locations(id),
+      party_id INTEGER REFERENCES parties(id),
+      from_value TEXT,
+      to_value TEXT,
+      actor_user_id INTEGER REFERENCES users(id),
+      notes TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_asset_events_asset_id ON asset_events(asset_id);
+    CREATE INDEX IF NOT EXISTS idx_asset_events_occurred_at ON asset_events(occurred_at);
   `);
 
   // Migrate `assets` onto the reference tables (Phase 2). Guarded and idempotent —

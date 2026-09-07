@@ -94,6 +94,8 @@ export const api = {
   createAsset: (data) => request('/gear/assets', { method: 'POST', body: JSON.stringify(data) }),
   updateAsset: (id, data) => request(`/gear/assets/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteAsset: (id) => request(`/gear/assets/${id}`, { method: 'DELETE' }),
+  // Read-only history, newest first (G3.2) — there is no corresponding write call.
+  getAssetEvents: (id) => request(`/gear/assets/${id}/events`),
 
   // Gear — reference data (asset types, lifecycle states are admin-managed vocabularies)
   getAssetTypes: () => request('/gear/asset-types'),

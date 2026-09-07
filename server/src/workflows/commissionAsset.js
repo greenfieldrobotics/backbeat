@@ -20,8 +20,9 @@ import { issueParts } from '../modules/stash/services/inventoryService.js';
  * @param {object} input
  * @param {object} input.asset            - asset fields (serial_number, asset_type_id, lifecycle_state_id, location_id, ...)
  * @param {Array}  [input.consume]        - parts to issue: [{ part_id, location_id, quantity }]
+ * @param {number} [input.actorUserId]    - who is commissioning it, or null in dev/test
  */
-export async function commissionAsset({ asset, consume = [] }) {
+export async function commissionAsset({ asset, consume = [], actorUserId = null }) {
   return withTransaction(async (client) => {
     // A commissioned asset defaults to 'In Use' rather than the registration default —
     // resolved by name so nothing here hardcodes the seeded state's id.
@@ -31,11 +32,13 @@ export async function commissionAsset({ asset, consume = [] }) {
       lifecycleStateId = inUse.id;
     }
 
-    // Gear module
+    // Gear module — createAsset writes the asset row AND its `registered` event
+    // (G3.2) using this same client, so a failure anywhere in this workflow rolls
+    // both back along with the Stash side below.
     const createdAsset = await createAsset(client, {
       ...asset,
       lifecycle_state_id: lifecycleStateId,
-    });
+    }, actorUserId);
 
     // Stash module — issue each consumed part, referenced back to the new asset
     const partsIssued = [];
