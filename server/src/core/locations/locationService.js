@@ -4,17 +4,17 @@
 // Every function takes a `db` (the pool, or a pg client already inside a BEGIN) as its
 // first argument so it can run standalone or compose inside a caller's transaction.
 
+import { executeSqlStrict, executeSqlWrite } from '../../db/connection.js';
 import { httpError } from '../http.js';
 
 export const VALID_TYPES = ['Warehouse', 'Regional Site', 'Contract Manufacturer'];
 
 export async function listLocations(db) {
-  const { rows } = await db.query('SELECT * FROM locations ORDER BY name');
-  return rows;
+  return executeSqlStrict(db, 'SELECT * FROM locations ORDER BY name');
 }
 
 export async function getLocation(db, id) {
-  const { rows } = await db.query('SELECT * FROM locations WHERE id = $1', [id]);
+  const rows = await executeSqlStrict(db, 'SELECT * FROM locations WHERE id = $1', [id]);
   if (rows.length === 0) throw httpError('Location not found', 404);
   return rows[0];
 }
@@ -28,7 +28,8 @@ export async function createLocation(db, { name, type }) {
   }
 
   try {
-    const { rows } = await db.query(
+    const rows = await executeSqlStrict(
+      db,
       'INSERT INTO locations (name, type) VALUES ($1, $2) RETURNING *',
       [name, type]
     );
@@ -40,7 +41,7 @@ export async function createLocation(db, { name, type }) {
 }
 
 export async function updateLocation(db, id, { name, type }) {
-  const { rows: existing } = await db.query('SELECT * FROM locations WHERE id = $1', [id]);
+  const existing = await executeSqlStrict(db, 'SELECT * FROM locations WHERE id = $1', [id]);
   if (existing.length === 0) throw httpError('Location not found', 404);
 
   if (type && !VALID_TYPES.includes(type)) {
@@ -48,7 +49,7 @@ export async function updateLocation(db, id, { name, type }) {
   }
 
   try {
-    const { rows } = await db.query(`
+    const rows = await executeSqlStrict(db, `
       UPDATE locations SET
         name = COALESCE($1, name),
         type = COALESCE($2, type),
@@ -64,10 +65,11 @@ export async function updateLocation(db, id, { name, type }) {
 }
 
 export async function deleteLocation(db, id) {
-  const { rows: existing } = await db.query('SELECT * FROM locations WHERE id = $1', [id]);
+  const existing = await executeSqlStrict(db, 'SELECT * FROM locations WHERE id = $1', [id]);
   if (existing.length === 0) throw httpError('Location not found', 404);
 
-  const { rows: inv } = await db.query(
+  const inv = await executeSqlStrict(
+    db,
     'SELECT SUM(quantity_on_hand) as total FROM inventory WHERE location_id = $1',
     [id]
   );
@@ -75,5 +77,5 @@ export async function deleteLocation(db, id) {
     throw httpError('Cannot delete location with existing inventory', 409);
   }
 
-  await db.query('DELETE FROM locations WHERE id = $1', [id]);
+  await executeSqlWrite(db, 'DELETE FROM locations WHERE id = $1', [id]);
 }

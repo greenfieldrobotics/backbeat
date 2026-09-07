@@ -8,21 +8,21 @@
 //
 // On failure they throw an Error with a `.status` property for the HTTP layer to use.
 
+import { executeSqlStrict, executeSqlWrite } from '../../../db/connection.js';
 import { httpError } from '../../../core/http.js';
 
 /** Oldest-first FIFO layers with stock left, for one part at one location. */
 async function openFifoLayers(client, part_id, location_id) {
-  const { rows } = await client.query(`
+  return executeSqlStrict(client, `
     SELECT * FROM fifo_layers
     WHERE part_id = $1 AND location_id = $2 AND remaining_qty > 0
     ORDER BY created_at ASC, id ASC
   `, [part_id, location_id]);
-  return rows;
 }
 
 /** Current stock levels across every part and location. */
 export async function listInventory(db) {
-  const { rows } = await db.query(`
+  return executeSqlStrict(db, `
     SELECT
       i.id,
       i.part_id,
@@ -37,7 +37,6 @@ export async function listInventory(db) {
     JOIN locations l ON i.location_id = l.id
     ORDER BY p.part_number, l.name
   `);
-  return rows;
 }
 
 /** FIFO layers, optionally filtered; depleted layers are hidden unless asked for. */
@@ -83,8 +82,7 @@ export async function listFifoLayers(db, { part_id, location_id, include_deplete
 
   sql += ' ORDER BY fl.part_id, fl.location_id, fl.created_at ASC';
 
-  const { rows } = await db.query(sql, params);
-  return rows;
+  return executeSqlStrict(db, sql, params);
 }
 
 /**
@@ -104,15 +102,16 @@ export async function issueParts(client, {
     throw httpError('part_id, location_id, and positive quantity are required', 400);
   }
 
-  const { rows: partRows } = await client.query('SELECT * FROM parts WHERE id = $1', [part_id]);
+  const partRows = await executeSqlStrict(client, 'SELECT * FROM parts WHERE id = $1', [part_id]);
   if (partRows.length === 0) throw httpError('Part not found', 404);
   const part = partRows[0];
 
-  const { rows: locRows } = await client.query('SELECT * FROM locations WHERE id = $1', [location_id]);
+  const locRows = await executeSqlStrict(client, 'SELECT * FROM locations WHERE id = $1', [location_id]);
   if (locRows.length === 0) throw httpError('Location not found', 404);
   const location = locRows[0];
 
-  const { rows: invRows } = await client.query(
+  const invRows = await executeSqlStrict(
+    client,
     'SELECT * FROM inventory WHERE part_id = $1 AND location_id = $2',
     [part_id, location_id]
   );
@@ -137,7 +136,8 @@ export async function issueParts(client, {
     const consumeQty = Math.min(remainingToIssue, layer.remaining_qty);
     const consumeCost = consumeQty * layer.unit_cost;
 
-    await client.query(
+    await executeSqlWrite(
+      client,
       'UPDATE fifo_layers SET remaining_qty = remaining_qty - $1 WHERE id = $2',
       [consumeQty, layer.id]
     );
@@ -155,14 +155,15 @@ export async function issueParts(client, {
   }
 
   // Update inventory
-  await client.query(
+  await executeSqlWrite(
+    client,
     'UPDATE inventory SET quantity_on_hand = quantity_on_hand - $1 WHERE part_id = $2 AND location_id = $3',
     [quantity, part_id, location_id]
   );
 
   // Audit trail
   const avgCost = totalCost / quantity;
-  await client.query(`
+  await executeSqlWrite(client, `
     INSERT INTO inventory_transactions (transaction_type, part_id, location_id, quantity, unit_cost, total_cost, reference_type, reference_id, target_ref, reason, fifo_layers_consumed)
     VALUES ('ISSUE', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
   `, [part_id, location_id, -quantity, avgCost, -totalCost, reference_type, reference_id, target_ref, reason, JSON.stringify(layersConsumed)]);
@@ -192,19 +193,20 @@ export async function moveInventory(client, { part_id, from_location_id, to_loca
     throw httpError('Source and destination locations must be different', 400);
   }
 
-  const { rows: partRows } = await client.query('SELECT * FROM parts WHERE id = $1', [part_id]);
+  const partRows = await executeSqlStrict(client, 'SELECT * FROM parts WHERE id = $1', [part_id]);
   if (partRows.length === 0) throw httpError('Part not found', 404);
   const part = partRows[0];
 
-  const { rows: fromLocRows } = await client.query('SELECT * FROM locations WHERE id = $1', [from_location_id]);
+  const fromLocRows = await executeSqlStrict(client, 'SELECT * FROM locations WHERE id = $1', [from_location_id]);
   if (fromLocRows.length === 0) throw httpError('Source location not found', 404);
   const fromLoc = fromLocRows[0];
 
-  const { rows: toLocRows } = await client.query('SELECT * FROM locations WHERE id = $1', [to_location_id]);
+  const toLocRows = await executeSqlStrict(client, 'SELECT * FROM locations WHERE id = $1', [to_location_id]);
   if (toLocRows.length === 0) throw httpError('Destination location not found', 404);
   const toLoc = toLocRows[0];
 
-  const { rows: invRows } = await client.query(
+  const invRows = await executeSqlStrict(
+    client,
     'SELECT * FROM inventory WHERE part_id = $1 AND location_id = $2',
     [part_id, from_location_id]
   );
@@ -230,13 +232,14 @@ export async function moveInventory(client, { part_id, from_location_id, to_loca
     const moveCost = moveQty * layer.unit_cost;
 
     // Reduce source layer
-    await client.query(
+    await executeSqlWrite(
+      client,
       'UPDATE fifo_layers SET remaining_qty = remaining_qty - $1 WHERE id = $2',
       [moveQty, layer.id]
     );
 
     // Create new layer at destination (preserving original cost and source)
-    await client.query(`
+    await executeSqlWrite(client, `
       INSERT INTO fifo_layers (part_id, location_id, source_type, source_ref, original_qty, remaining_qty, unit_cost, created_at)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
     `, [part_id, to_location_id, layer.source_type, layer.source_ref, moveQty, moveQty, layer.unit_cost, layer.created_at]);
@@ -253,13 +256,14 @@ export async function moveInventory(client, { part_id, from_location_id, to_loca
   }
 
   // Update source inventory
-  await client.query(
+  await executeSqlWrite(
+    client,
     'UPDATE inventory SET quantity_on_hand = quantity_on_hand - $1 WHERE part_id = $2 AND location_id = $3',
     [quantity, part_id, from_location_id]
   );
 
   // Upsert destination inventory
-  await client.query(`
+  await executeSqlWrite(client, `
     INSERT INTO inventory (part_id, location_id, quantity_on_hand)
     VALUES ($1, $2, $3)
     ON CONFLICT(part_id, location_id) DO UPDATE SET quantity_on_hand = inventory.quantity_on_hand + $4
@@ -267,7 +271,7 @@ export async function moveInventory(client, { part_id, from_location_id, to_loca
 
   // Audit trail
   const avgCost = totalCost / quantity;
-  await client.query(`
+  await executeSqlWrite(client, `
     INSERT INTO inventory_transactions (transaction_type, part_id, location_id, to_location_id, quantity, unit_cost, total_cost, reference_type, fifo_layers_consumed)
     VALUES ('MOVE', $1, $2, $3, $4, $5, $6, 'MANUAL', $7)
   `, [part_id, from_location_id, to_location_id, quantity, avgCost, totalCost, JSON.stringify(layersMoved)]);
@@ -291,15 +295,16 @@ export async function disposeInventory(client, { part_id, location_id, quantity,
     throw httpError('reason is required for disposal (e.g., damaged, obsolete, expired)', 400);
   }
 
-  const { rows: partRows } = await client.query('SELECT * FROM parts WHERE id = $1', [part_id]);
+  const partRows = await executeSqlStrict(client, 'SELECT * FROM parts WHERE id = $1', [part_id]);
   if (partRows.length === 0) throw httpError('Part not found', 404);
   const part = partRows[0];
 
-  const { rows: locRows } = await client.query('SELECT * FROM locations WHERE id = $1', [location_id]);
+  const locRows = await executeSqlStrict(client, 'SELECT * FROM locations WHERE id = $1', [location_id]);
   if (locRows.length === 0) throw httpError('Location not found', 404);
   const location = locRows[0];
 
-  const { rows: invRows } = await client.query(
+  const invRows = await executeSqlStrict(
+    client,
     'SELECT * FROM inventory WHERE part_id = $1 AND location_id = $2',
     [part_id, location_id]
   );
@@ -324,7 +329,8 @@ export async function disposeInventory(client, { part_id, location_id, quantity,
     const consumeQty = Math.min(remainingToDispose, layer.remaining_qty);
     const consumeCost = consumeQty * layer.unit_cost;
 
-    await client.query(
+    await executeSqlWrite(
+      client,
       'UPDATE fifo_layers SET remaining_qty = remaining_qty - $1 WHERE id = $2',
       [consumeQty, layer.id]
     );
@@ -341,14 +347,15 @@ export async function disposeInventory(client, { part_id, location_id, quantity,
   }
 
   // Update inventory
-  await client.query(
+  await executeSqlWrite(
+    client,
     'UPDATE inventory SET quantity_on_hand = quantity_on_hand - $1 WHERE part_id = $2 AND location_id = $3',
     [quantity, part_id, location_id]
   );
 
   // Audit trail
   const avgCost = totalCost / quantity;
-  await client.query(`
+  await executeSqlWrite(client, `
     INSERT INTO inventory_transactions (transaction_type, part_id, location_id, quantity, unit_cost, total_cost, reference_type, reason, fifo_layers_consumed)
     VALUES ('DISPOSE', $1, $2, $3, $4, $5, 'MANUAL', $6, $7)
   `, [part_id, location_id, -quantity, avgCost, -totalCost, reason, JSON.stringify(layersConsumed)]);
@@ -372,23 +379,23 @@ export async function returnParts(client, { part_id, location_id, quantity, unit
     throw httpError('unit_cost is required and must be >= 0', 400);
   }
 
-  const { rows: partRows } = await client.query('SELECT * FROM parts WHERE id = $1', [part_id]);
+  const partRows = await executeSqlStrict(client, 'SELECT * FROM parts WHERE id = $1', [part_id]);
   if (partRows.length === 0) throw httpError('Part not found', 404);
   const part = partRows[0];
 
-  const { rows: locRows } = await client.query('SELECT * FROM locations WHERE id = $1', [location_id]);
+  const locRows = await executeSqlStrict(client, 'SELECT * FROM locations WHERE id = $1', [location_id]);
   if (locRows.length === 0) throw httpError('Location not found', 404);
   const location = locRows[0];
 
   // Create new FIFO layer for the return
-  const { rows: [fifoLayer] } = await client.query(`
+  const [fifoLayer] = await executeSqlStrict(client, `
     INSERT INTO fifo_layers (part_id, location_id, source_type, source_ref, original_qty, remaining_qty, unit_cost)
     VALUES ($1, $2, 'RETURN', $3, $4, $5, $6)
     RETURNING *
   `, [part_id, location_id, reference || null, quantity, quantity, unit_cost]);
 
   // Upsert inventory
-  await client.query(`
+  await executeSqlWrite(client, `
     INSERT INTO inventory (part_id, location_id, quantity_on_hand)
     VALUES ($1, $2, $3)
     ON CONFLICT(part_id, location_id) DO UPDATE SET quantity_on_hand = inventory.quantity_on_hand + $4
@@ -396,7 +403,7 @@ export async function returnParts(client, { part_id, location_id, quantity, unit
 
   // Audit trail
   const totalCost = quantity * unit_cost;
-  await client.query(`
+  await executeSqlWrite(client, `
     INSERT INTO inventory_transactions (transaction_type, part_id, location_id, quantity, unit_cost, total_cost, reference_type, target_ref, reason)
     VALUES ('RETURN', $1, $2, $3, $4, $5, 'MANUAL', $6, $7)
   `, [part_id, location_id, quantity, unit_cost, totalCost, reference || null, reason || null]);
@@ -420,7 +427,7 @@ export async function returnParts(client, { part_id, location_id, quantity, unit
 
 /** Most recent FIFO unit cost for a part, at a location and then anywhere. */
 async function latestUnitCost(client, part_id, location_id) {
-  const { rows: atLocation } = await client.query(`
+  const atLocation = await executeSqlStrict(client, `
     SELECT unit_cost FROM fifo_layers
     WHERE part_id = $1 AND location_id = $2
     ORDER BY created_at DESC, id DESC
@@ -428,7 +435,7 @@ async function latestUnitCost(client, part_id, location_id) {
   `, [part_id, location_id]);
   if (atLocation.length > 0) return Number(atLocation[0].unit_cost);
 
-  const { rows: anywhere } = await client.query(`
+  const anywhere = await executeSqlStrict(client, `
     SELECT unit_cost FROM fifo_layers
     WHERE part_id = $1
     ORDER BY created_at DESC, id DESC
@@ -452,16 +459,17 @@ export async function adjustInventory(client, { part_id, location_id, new_quanti
     throw httpError('reason is required for inventory adjustments', 400);
   }
 
-  const { rows: partRows } = await client.query('SELECT * FROM parts WHERE id = $1', [part_id]);
+  const partRows = await executeSqlStrict(client, 'SELECT * FROM parts WHERE id = $1', [part_id]);
   if (partRows.length === 0) throw httpError('Part not found', 404);
   const part = partRows[0];
 
-  const { rows: locRows } = await client.query('SELECT * FROM locations WHERE id = $1', [location_id]);
+  const locRows = await executeSqlStrict(client, 'SELECT * FROM locations WHERE id = $1', [location_id]);
   if (locRows.length === 0) throw httpError('Location not found', 404);
   const location = locRows[0];
 
   // Get current quantity
-  const { rows: invRows } = await client.query(
+  const invRows = await executeSqlStrict(
+    client,
     'SELECT * FROM inventory WHERE part_id = $1 AND location_id = $2',
     [part_id, location_id]
   );
@@ -489,7 +497,8 @@ export async function adjustInventory(client, { part_id, location_id, new_quanti
     // Shortage — consume FIFO layers oldest-first
     const absDelta = Math.abs(delta);
 
-    const { rows: invCheck } = await client.query(
+    const invCheck = await executeSqlStrict(
+      client,
       'SELECT * FROM inventory WHERE part_id = $1 AND location_id = $2',
       [part_id, location_id]
     );
@@ -508,7 +517,8 @@ export async function adjustInventory(client, { part_id, location_id, new_quanti
       const consumeQty = Math.min(remainingToConsume, layer.remaining_qty);
       const consumeCost = consumeQty * layer.unit_cost;
 
-      await client.query(
+      await executeSqlWrite(
+        client,
         'UPDATE fifo_layers SET remaining_qty = remaining_qty - $1 WHERE id = $2',
         [consumeQty, layer.id]
       );
@@ -525,7 +535,8 @@ export async function adjustInventory(client, { part_id, location_id, new_quanti
     }
 
     // Update inventory
-    await client.query(
+    await executeSqlWrite(
+      client,
       'UPDATE inventory SET quantity_on_hand = quantity_on_hand - $1 WHERE part_id = $2 AND location_id = $3',
       [absDelta, part_id, location_id]
     );
@@ -534,7 +545,7 @@ export async function adjustInventory(client, { part_id, location_id, new_quanti
     fifoLayersConsumed = layersConsumed;
 
     // Audit trail
-    await client.query(`
+    await executeSqlWrite(client, `
       INSERT INTO inventory_transactions (transaction_type, part_id, location_id, quantity, unit_cost, total_cost, reference_type, reason, fifo_layers_consumed)
       VALUES ('ADJUSTMENT', $1, $2, $3, $4, $5, 'MANUAL', $6, $7)
     `, [part_id, location_id, delta, adjustUnitCost, -totalCost, reason, JSON.stringify(layersConsumed)]);
@@ -554,7 +565,7 @@ export async function adjustInventory(client, { part_id, location_id, new_quanti
     adjustUnitCost = costToUse;
 
     // Create FIFO layer
-    const { rows: [fifoLayer] } = await client.query(`
+    const [fifoLayer] = await executeSqlStrict(client, `
       INSERT INTO fifo_layers (part_id, location_id, source_type, source_ref, original_qty, remaining_qty, unit_cost)
       VALUES ($1, $2, 'ADJUSTMENT', $3, $4, $5, $6)
       RETURNING *
@@ -569,14 +580,14 @@ export async function adjustInventory(client, { part_id, location_id, new_quanti
     };
 
     // Upsert inventory
-    await client.query(`
+    await executeSqlWrite(client, `
       INSERT INTO inventory (part_id, location_id, quantity_on_hand)
       VALUES ($1, $2, $3)
       ON CONFLICT(part_id, location_id) DO UPDATE SET quantity_on_hand = inventory.quantity_on_hand + $4
     `, [part_id, location_id, delta, delta]);
 
     // Audit trail
-    await client.query(`
+    await executeSqlWrite(client, `
       INSERT INTO inventory_transactions (transaction_type, part_id, location_id, quantity, unit_cost, total_cost, reference_type, reason)
       VALUES ('ADJUSTMENT', $1, $2, $3, $4, $5, 'MANUAL', $6)
     `, [part_id, location_id, delta, costToUse, totalCost, reason]);
@@ -633,13 +644,12 @@ export async function listTransactions(db, { part_id, location_id, limit = 100 }
   sql += ` ORDER BY t.created_at DESC LIMIT $${paramIndex}`;
   params.push(limit);
 
-  const { rows } = await db.query(sql, params);
-  return rows;
+  return executeSqlStrict(db, sql, params);
 }
 
 /** FIFO valuation: every open layer, a per-part/location summary, and the grand total. */
 export async function getValuation(db) {
-  const { rows: layers } = await db.query(`
+  const layers = await executeSqlStrict(db, `
     SELECT
       p.part_number,
       p.description as part_description,
@@ -659,7 +669,7 @@ export async function getValuation(db) {
   `);
 
   // Summary by part and location
-  const { rows: summary } = await db.query(`
+  const summary = await executeSqlStrict(db, `
     SELECT
       p.part_number,
       p.description as part_description,
