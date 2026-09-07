@@ -1,95 +1,64 @@
 import { Router } from 'express';
-import { query } from '../../db/connection.js';
+import pool from '../../db/connection.js';
+import {
+  listLocations,
+  getLocation,
+  createLocation,
+  updateLocation,
+  deleteLocation,
+} from './locationService.js';
 
 const router = Router();
 
 // GET /api/locations - List all locations
 router.get('/', async (req, res) => {
-  const { rows } = await query('SELECT * FROM locations ORDER BY name');
-  res.json(rows);
+  res.json(await listLocations(pool));
 });
 
 // GET /api/locations/:id - Get single location
 router.get('/:id', async (req, res) => {
-  const { rows } = await query('SELECT * FROM locations WHERE id = $1', [req.params.id]);
-  if (rows.length === 0) return res.status(404).json({ error: 'Location not found' });
-  res.json(rows[0]);
+  try {
+    res.json(await getLocation(pool, req.params.id));
+  } catch (err) {
+    if (!err.status) throw err;
+    res.status(err.status).json({ error: err.message });
+  }
 });
 
 // POST /api/locations - Create a location
 router.post('/', async (req, res) => {
   const { name, type } = req.body;
 
-  if (!name || !type) {
-    return res.status(400).json({ error: 'name and type are required' });
-  }
-
-  const validTypes = ['Warehouse', 'Regional Site', 'Contract Manufacturer'];
-  if (!validTypes.includes(type)) {
-    return res.status(400).json({ error: `type must be one of: ${validTypes.join(', ')}` });
-  }
-
   try {
-    const { rows } = await query(
-      'INSERT INTO locations (name, type) VALUES ($1, $2) RETURNING *',
-      [name, type]
-    );
-    res.status(201).json(rows[0]);
+    const location = await createLocation(pool, { name, type });
+    res.status(201).json(location);
   } catch (err) {
-    if (err.code === '23505') {
-      return res.status(409).json({ error: 'Location name already exists' });
-    }
-    throw err;
+    if (!err.status) throw err;
+    res.status(err.status).json({ error: err.message });
   }
 });
 
 // PUT /api/locations/:id - Update a location
 router.put('/:id', async (req, res) => {
-  const { rows: existing } = await query('SELECT * FROM locations WHERE id = $1', [req.params.id]);
-  if (existing.length === 0) return res.status(404).json({ error: 'Location not found' });
-
   const { name, type } = req.body;
 
-  if (type) {
-    const validTypes = ['Warehouse', 'Regional Site', 'Contract Manufacturer'];
-    if (!validTypes.includes(type)) {
-      return res.status(400).json({ error: `type must be one of: ${validTypes.join(', ')}` });
-    }
-  }
-
   try {
-    const { rows } = await query(`
-      UPDATE locations SET
-        name = COALESCE($1, name),
-        type = COALESCE($2, type),
-        updated_at = NOW()
-      WHERE id = $3
-      RETURNING *
-    `, [name || null, type || null, req.params.id]);
-    res.json(rows[0]);
+    res.json(await updateLocation(pool, req.params.id, { name, type }));
   } catch (err) {
-    if (err.code === '23505') {
-      return res.status(409).json({ error: 'Location name already exists' });
-    }
-    throw err;
+    if (!err.status) throw err;
+    res.status(err.status).json({ error: err.message });
   }
 });
 
 // DELETE /api/locations/:id - Delete a location
 router.delete('/:id', async (req, res) => {
-  const { rows: existing } = await query('SELECT * FROM locations WHERE id = $1', [req.params.id]);
-  if (existing.length === 0) return res.status(404).json({ error: 'Location not found' });
-
-  const { rows: inv } = await query(
-    'SELECT SUM(quantity_on_hand) as total FROM inventory WHERE location_id = $1',
-    [req.params.id]
-  );
-  if (inv[0] && inv[0].total > 0) {
-    return res.status(409).json({ error: 'Cannot delete location with existing inventory' });
+  try {
+    await deleteLocation(pool, req.params.id);
+    res.status(204).send();
+  } catch (err) {
+    if (!err.status) throw err;
+    res.status(err.status).json({ error: err.message });
   }
-
-  await query('DELETE FROM locations WHERE id = $1', [req.params.id]);
-  res.status(204).send();
 });
 
 export default router;

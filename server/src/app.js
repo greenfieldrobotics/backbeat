@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 import pool from './db/connection.js';
 import passport from './core/auth/passport.js';
 import { requireAuth } from './core/auth/authMiddleware.js';
+import { pingDatabase } from './core/health/healthService.js';
 import authRoutes from './core/auth/authRoutes.js';
 import usersRouter from './core/users/routes.js';
 import locationsRouter from './core/locations/routes.js';
@@ -51,7 +52,7 @@ app.use('/auth', authRoutes);
 // Health check (unprotected — for monitoring)
 app.get('/api/health', async (req, res) => {
   try {
-    await pool.query('SELECT 1');
+    await pingDatabase(pool);
     res.json({ status: 'ok', service: 'Backbeat', modules: ['Stash', 'Gear'], version: '0.1.0' });
   } catch (err) {
     res.status(503).json({ status: 'error', message: 'Database unreachable' });

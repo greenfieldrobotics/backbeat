@@ -11,7 +11,7 @@
 // "consumed" parts that were never deducted, or vice versa. Modules are organized in
 // separate folders, but nothing stops them composing here.
 
-import { getClient } from '../db/connection.js';
+import { withTransaction } from '../db/connection.js';
 import { createAsset } from '../modules/gear/services/assetService.js';
 import { issueParts } from '../modules/stash/services/inventoryService.js';
 
@@ -21,10 +21,7 @@ import { issueParts } from '../modules/stash/services/inventoryService.js';
  * @param {Array}  [input.consume]        - parts to issue: [{ part_id, location_id, quantity }]
  */
 export async function commissionAsset({ asset, consume = [] }) {
-  const client = await getClient();
-  try {
-    await client.query('BEGIN');
-
+  return withTransaction(async (client) => {
     // Gear module
     const createdAsset = await createAsset(client, {
       ...asset,
@@ -46,12 +43,6 @@ export async function commissionAsset({ asset, consume = [] }) {
       partsIssued.push(issued);
     }
 
-    await client.query('COMMIT');
     return { asset: createdAsset, parts_issued: partsIssued };
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
-  } finally {
-    client.release();
-  }
+  });
 }

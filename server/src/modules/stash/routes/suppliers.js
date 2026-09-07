@@ -1,30 +1,22 @@
 import { Router } from 'express';
-import { query } from '../../../db/connection.js';
+import pool from '../../../db/connection.js';
+import { listSuppliers, createSupplier } from '../services/supplierService.js';
 
 const router = Router();
 
 // GET /api/suppliers
 router.get('/', async (req, res) => {
-  const { rows } = await query('SELECT * FROM suppliers ORDER BY name');
-  res.json(rows);
+  res.json(await listSuppliers(pool));
 });
 
 // POST /api/suppliers
 router.post('/', async (req, res) => {
-  const { name } = req.body;
-  if (!name) return res.status(400).json({ error: 'name is required' });
-
   try {
-    const { rows } = await query(
-      'INSERT INTO suppliers (name) VALUES ($1) RETURNING *',
-      [name]
-    );
-    res.status(201).json(rows[0]);
+    const supplier = await createSupplier(pool, { name: req.body.name });
+    res.status(201).json(supplier);
   } catch (err) {
-    if (err.code === '23505') {
-      return res.status(409).json({ error: 'Supplier name already exists' });
-    }
-    throw err;
+    if (!err.status) throw err;
+    res.status(err.status).json({ error: err.message });
   }
 });
 
