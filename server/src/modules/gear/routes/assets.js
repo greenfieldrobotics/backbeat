@@ -3,6 +3,7 @@ import pool, { withTransaction } from '../../../db/connection.js';
 import {
   listAssets,
   getAsset,
+  getAssetBySerial,
   createAsset,
   updateAsset,
   deleteAsset,
@@ -14,6 +15,20 @@ const router = Router();
 // GET /api/gear/assets - List all assets (joined with their shared/core location)
 router.get('/', async (req, res) => {
   res.json(await listAssets(pool));
+});
+
+// GET /api/gear/assets/by-serial/:serial - Resolve a scanned label to its asset (G2.2).
+// Distinct path segment (not /:id) so it can never collide with the numeric id route
+// below, regardless of route registration order. Normalizes the same way writes do
+// (trim + uppercase) so a label scanned lowercase or with stray whitespace still
+// resolves — see normalizeSerial() in assetService.js.
+router.get('/by-serial/:serial', async (req, res) => {
+  try {
+    res.json(await getAssetBySerial(pool, req.params.serial));
+  } catch (err) {
+    if (!err.status) throw err;
+    res.status(err.status).json({ error: err.message });
+  }
 });
 
 // GET /api/gear/assets/:id - Get a single asset

@@ -96,6 +96,9 @@ export const api = {
   deleteAsset: (id) => request(`/gear/assets/${id}`, { method: 'DELETE' }),
   // Read-only history, newest first (G3.2) — there is no corresponding write call.
   getAssetEvents: (id) => request(`/gear/assets/${id}/events`),
+  // Resolve a scanned label (G2.2). Server normalizes case/whitespace, so the raw
+  // route param is passed through untouched — only URL-encoded for the path segment.
+  getAssetBySerial: (serial) => request(`/gear/assets/by-serial/${encodeURIComponent(serial)}`),
 
   // Gear — reference data (asset types, lifecycle states are admin-managed vocabularies)
   getAssetTypes: () => request('/gear/asset-types'),
