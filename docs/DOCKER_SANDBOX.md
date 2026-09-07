@@ -26,6 +26,11 @@ GIT_USER_NAME=Your Name
 GIT_USER_EMAIL=your-email@example.com
 ```
 
+All three matter: `GITHUB_TOKEN` lets you push branches, and `GIT_USER_NAME` /
+`GIT_USER_EMAIL` set the git identity. Without the name and email, `git commit`
+inside the container fails with "Please tell me who you are."
+`./scripts/dev.sh` warns you on startup if either one is missing.
+
 ### 2. Build and start
 
 ```bash
@@ -45,29 +50,61 @@ Open http://localhost:5173 in your browser.
 ## Every Time You Work
 
 ```bash
-docker compose up
+./scripts/dev.sh
 ```
 
-Everything starts automatically. Open http://localhost:5173.
+One command, one terminal. The script starts Docker Desktop if it isn't running,
+brings the containers up, waits until the API is actually responding (dependency
+installs and seeding are finished), and then opens Claude Code inside the container.
 
-To use Claude Code, open a second terminal:
-
-```bash
-docker compose exec backbeat bash
-claude
-```
+Open http://localhost:5173 in your browser.
 
 Log in with your Claude Max account when prompted (first time only).
 
+### Script options
+
+| Command | What it does |
+|---|---|
+| `./scripts/dev.sh` | Start everything, then open Claude Code |
+| `./scripts/dev.sh --no-claude` | Start the stack only, no Claude session |
+| `./scripts/dev.sh --shell` | Open a plain bash shell instead of Claude |
+| `./scripts/dev.sh --rebuild` | Rebuild the image first (after Dockerfile changes) |
+| `./scripts/dev.sh --help` | Show usage |
+
 ### When you're done
 
-Press `Ctrl+C` in the first terminal to stop the container. Your code and database are preserved — nothing is lost.
+Exiting Claude leaves the app running. To stop the containers:
+
+```bash
+docker compose stop
+```
+
+Your code and database are preserved — nothing is lost.
+
+### Doing it manually
+
+The script is a convenience wrapper. The equivalent by hand, in two terminals:
+
+```bash
+# Terminal 1
+docker compose up
+
+# Terminal 2, once setup is complete
+docker compose exec -w /app backbeat bash
+claude
+```
 
 ---
 
 ## After Dockerfile Changes (rebuild)
 
 If the Dockerfile is modified (e.g., new tools added, Node version updated):
+
+```bash
+./scripts/dev.sh --rebuild
+```
+
+Or by hand:
 
 ```bash
 docker compose build
@@ -99,7 +136,8 @@ Dependencies are reinstalled automatically on startup.
 
 ## Common Commands
 
-All commands run inside the container (use `docker compose exec backbeat bash` to get a shell):
+All commands run inside the container (use `./scripts/dev.sh --shell`, or
+`docker compose exec -w /app backbeat bash`, to get a shell):
 
 ```bash
 claude                         # Start Claude Code
