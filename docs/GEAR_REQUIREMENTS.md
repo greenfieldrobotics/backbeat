@@ -549,6 +549,7 @@ Real requirements, deliberately not being built yet. Each has a trigger.
 | 7.4 | **Joining a truck-as-location to a truck-as-asset** (§5.2) | A real question needs the join |
 | 7.5 | **Per-blade identity** (§5.6) | Warranty or failure traceability against an individual blade |
 | 7.6 | **Manufacturer-scoped serial uniqueness** (§5.1) | The first genuine collision — which will announce itself |
+| 7.7 | **Retire an asset instead of deleting it.** Deleting an asset currently deletes its whole event history with it — every asset has a `registered` event from birth, so refusing to delete assets that have events would make every asset undeletable. Accepted while there are no real assets. The registry is meant to be the record of what the company owns, and a history a delete button can erase is not an audit trail. `lifecycle_states` already carries `Retired` and an `is_terminal` flag, which is the mechanism | **Before real assets are registered.** This is the trigger that matters: it is cheap to change while the only assets are test data, and it is a data-loss question afterwards |
 
 ---
 
