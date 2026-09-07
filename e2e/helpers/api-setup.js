@@ -73,6 +73,32 @@ export async function createTestAssetType(overrides = {}) {
   return res.json();
 }
 
+/**
+ * Create a Gear asset model and return the full row. Unlike lifecycle_states,
+ * asset_models isn't truncated between e2e runs either, and (manufacturer, model_name)
+ * is unique — so a fixed pair would 409 on a second run. Idempotent the same way
+ * createTestAssetType is: reuse the existing row on a 409 instead of failing.
+ */
+export async function createTestAssetModel(overrides = {}) {
+  const manufacturer = overrides.manufacturer || 'Test Manufacturer';
+  const model_name = overrides.model_name || `Test Model ${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+  const res = await fetch(`${BASE}/gear/asset-models`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ manufacturer, model_name, ...overrides }),
+  });
+  if (res.status === 409) {
+    const list = await (await fetch(`${BASE}/gear/asset-models`)).json();
+    const existing = list.find(m => m.manufacturer === manufacturer && m.model_name === model_name);
+    if (existing) return existing;
+  }
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`POST /gear/asset-models failed (${res.status}): ${text}`);
+  }
+  return res.json();
+}
+
 /** Create a test supplier and return the full row */
 export async function createTestSupplier(overrides = {}) {
   return post('/stash/suppliers', {

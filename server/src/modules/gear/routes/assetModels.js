@@ -7,6 +7,7 @@ import {
   updateAssetModel,
   deleteAssetModel,
 } from '../services/assetModelService.js';
+import { getComponentInstallationsForModel } from '../services/componentInstallationService.js';
 
 const router = Router();
 
@@ -19,6 +20,19 @@ router.get('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     res.json(await getAssetModel(pool, req.params.id));
+  } catch (err) {
+    if (!err.status) throw err;
+    res.status(err.status).json({ error: err.message });
+  }
+});
+
+// GET /api/gear/asset-models/:id/component-installations - Every installation of
+// this model, across every asset it has ever been on (G6.3) — the comparison
+// "which design lasts longest" reads.
+router.get('/:id/component-installations', async (req, res) => {
+  try {
+    await getAssetModel(pool, req.params.id); // 404s if the model doesn't exist
+    res.json(await getComponentInstallationsForModel(pool, req.params.id));
   } catch (err) {
     if (!err.status) throw err;
     res.status(err.status).json({ error: err.message });

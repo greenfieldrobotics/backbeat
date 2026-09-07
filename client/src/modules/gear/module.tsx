@@ -6,6 +6,7 @@ import AssetLookupPage from './pages/AssetLookupPage';
 import ScanPage from './pages/ScanPage';
 import LocatePage from './pages/LocatePage';
 import LinkPage from './pages/LinkPage';
+import MaintenancePage from './pages/MaintenancePage';
 
 interface NavItem {
   to: string;
@@ -33,12 +34,14 @@ const gearModule: GearModule = {
     { to: '/gear/scan', label: 'Scan' },
     { to: '/gear/locate', label: 'Locate' },
     { to: '/gear/link', label: 'Link' },
+    { to: '/gear/maintenance', label: 'Maintenance' },
   ],
   routes: [
     { path: '/gear/assets', element: <AssetsPage /> },
     { path: '/gear/scan', element: <ScanPage /> },
     { path: '/gear/locate', element: <LocatePage /> },
     { path: '/gear/link', element: <LinkPage /> },
+    { path: '/gear/maintenance', element: <MaintenancePage /> },
     // Label landing route (G2.2) — reached only via a scanned/printed URL, never
     // from the nav, so it isn't in `nav` above.
     { path: '/a/:serial', element: <AssetLookupPage /> },

@@ -10,6 +10,8 @@ import {
 } from '../services/assetService.js';
 import { getAssetEvents } from '../services/assetEventService.js';
 import { getLinksForAsset } from '../services/assetLinkService.js';
+import { getMaintenanceOrdersForAsset } from '../services/maintenanceOrderService.js';
+import { getComponentInstallationsForAsset } from '../services/componentInstallationService.js';
 
 const router = Router();
 
@@ -62,6 +64,29 @@ router.get('/:id/links', async (req, res) => {
   try {
     await getAsset(pool, req.params.id); // 404s if the asset doesn't exist
     res.json(await getLinksForAsset(pool, req.params.id, { asOf: req.query.as_of || null }));
+  } catch (err) {
+    if (!err.status) throw err;
+    res.status(err.status).json({ error: err.message });
+  }
+});
+
+// GET /api/gear/assets/:id/maintenance-orders - Service history (G6.1), newest first.
+router.get('/:id/maintenance-orders', async (req, res) => {
+  try {
+    await getAsset(pool, req.params.id); // 404s if the asset doesn't exist
+    res.json(await getMaintenanceOrdersForAsset(pool, req.params.id));
+  } catch (err) {
+    if (!err.status) throw err;
+    res.status(err.status).json({ error: err.message });
+  }
+});
+
+// GET /api/gear/assets/:id/component-installations - Components this asset has
+// hosted, current and past (G6.3).
+router.get('/:id/component-installations', async (req, res) => {
+  try {
+    await getAsset(pool, req.params.id); // 404s if the asset doesn't exist
+    res.json(await getComponentInstallationsForAsset(pool, req.params.id));
   } catch (err) {
     if (!err.status) throw err;
     res.status(err.status).json({ error: err.message });
