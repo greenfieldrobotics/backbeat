@@ -13,6 +13,7 @@
 
 import { executeSqlStrict, executeSqlWrite, executeSqlInsert } from '../../../db/connection.js';
 import { httpError } from '../../../core/http.js';
+import { createAssetEvent } from './assetEventService.js';
 
 const SELECT_WITH_JOINS = `
   SELECT
@@ -51,6 +52,19 @@ async function getDefaultOwnerPartyId(db) {
   return rows[0].id;
 }
 
+/** Event from_value/to_value record names, not ids (§6.5 item 2) — null in, null out. */
+async function lifecycleStateName(db, id) {
+  if (!id) return null;
+  const rows = await executeSqlStrict(db, 'SELECT name FROM lifecycle_states WHERE id = $1', [id]);
+  return rows[0]?.name ?? null;
+}
+
+async function partyName(db, id) {
+  if (!id) return null;
+  const rows = await executeSqlStrict(db, 'SELECT name FROM parties WHERE id = $1', [id]);
+  return rows[0]?.name ?? null;
+}
+
 /** Assets always travel with the display names of everything they reference. */
 export async function listAssets(db) {
   return executeSqlStrict(db, `${SELECT_WITH_JOINS} ORDER BY a.serial_number NULLS LAST, a.id`);
@@ -72,7 +86,12 @@ async function getAssetRaw(db, id) {
 /**
  * Register an asset. Only asset_type_id and lifecycle_state_id are required (§2.3) —
  * everything else, including serial_number, is optional. owner_party_id defaults to
- * the Greenfield party when omitted (G1.5).
+ * the Greenfield party when omitted (G1.5). Writes a `registered` event using the
+ * same `db` as the insert (G3.2) — the caller (a route or `commissionAsset`) is
+ * responsible for that being a transaction client, not the bare pool, so the two
+ * writes commit or roll back together. `actorUserId` is whoever is making the
+ * change, or null in dev/test where there is no `req.user` — passed in, never
+ * looked up here.
  */
 export async function createAsset(db, {
   serial_number = null,
@@ -86,7 +105,7 @@ export async function createAsset(db, {
   disposed_at = null,
   attributes = null,
   notes = null,
-}) {
+}, actorUserId = null) {
   if (!asset_type_id) throw httpError('asset_type_id is required', 400);
   if (!lifecycle_state_id) throw httpError('lifecycle_state_id is required', 400);
 
@@ -144,11 +163,18 @@ export async function createAsset(db, {
     notes,
   ]);
 
+  await createAssetEvent(db, {
+    asset_id: id,
+    event_type: 'registered',
+    location_id,
+    actor_user_id: actorUserId,
+  });
+
   return getAsset(db, id);
 }
 
 /** Patch an asset — fields left out of `changes` keep their current value. */
-export async function updateAsset(db, id, changes) {
+export async function updateAsset(db, id, changes, actorUserId = null) {
   const existing = await getAssetRaw(db, id);
   const {
     serial_number, asset_type_id, lifecycle_state_id, model_id, location_id,
@@ -195,6 +221,11 @@ export async function updateAsset(db, id, changes) {
     if (dup.length > 0) throw httpError('An asset with that serial_number already exists', 409);
   }
 
+  // Custody is who HOLDS the asset (custodian_party_id) — distinct from who owns it
+  // (G1.5). Computed here, not just inline in the UPDATE call, because the event
+  // diff below needs the same "next" value.
+  const nextCustodianPartyId = custodian_party_id !== undefined ? custodian_party_id : existing.custodian_party_id;
+
   await executeSqlWrite(db, `
     UPDATE assets SET
       serial_number = $1,
@@ -217,7 +248,7 @@ export async function updateAsset(db, id, changes) {
     model_id !== undefined ? model_id : existing.model_id,
     locId,
     owner_party_id !== undefined ? owner_party_id : existing.owner_party_id,
-    custodian_party_id !== undefined ? custodian_party_id : existing.custodian_party_id,
+    nextCustodianPartyId,
     acquired_at !== undefined ? acquired_at : existing.acquired_at,
     disposed_at !== undefined ? disposed_at : existing.disposed_at,
     attributes !== undefined
@@ -227,10 +258,62 @@ export async function updateAsset(db, id, changes) {
     id,
   ]);
 
+  // One event per dimension that actually changed — never for a value re-set to
+  // what it already was — using the same `db` as the UPDATE above (G3.2). If the
+  // caller passed the bare pool instead of a transaction client, these commit
+  // independently of the UPDATE and of each other; that is exactly the failure mode
+  // routes/assets.js's withTransaction wrapping exists to prevent.
+  if (nextLifecycleStateId !== existing.lifecycle_state_id) {
+    // Sequential, not Promise.all: `db` may be a single transaction client, which
+    // cannot run overlapping queries.
+    const fromName = await lifecycleStateName(db, existing.lifecycle_state_id);
+    const toName = await lifecycleStateName(db, nextLifecycleStateId);
+    await createAssetEvent(db, {
+      asset_id: id,
+      event_type: 'state_changed',
+      from_value: fromName,
+      to_value: toName,
+      actor_user_id: actorUserId,
+    });
+  }
+
+  if (locId !== existing.location_id) {
+    await createAssetEvent(db, {
+      asset_id: id,
+      event_type: 'moved',
+      location_id: locId,
+      actor_user_id: actorUserId,
+    });
+  }
+
+  if (nextCustodianPartyId !== existing.custodian_party_id) {
+    const fromName = await partyName(db, existing.custodian_party_id);
+    const toName = await partyName(db, nextCustodianPartyId);
+    await createAssetEvent(db, {
+      asset_id: id,
+      event_type: 'custody_changed',
+      party_id: nextCustodianPartyId,
+      from_value: fromName,
+      to_value: toName,
+      actor_user_id: actorUserId,
+    });
+  }
+
   return getAsset(db, id);
 }
 
+/**
+ * Every asset now has at least a `registered` event (asset_events.asset_id has no
+ * ON DELETE CASCADE — nothing in this schema uses one), so deleting the asset
+ * itself must also delete its event history in the same operation, not leave it
+ * orphaned against a foreign key. This is not the same thing as the append-only
+ * rule being violated: that rule is about an event being edited or removed while
+ * its asset still exists. Once the asset itself is gone there is no subject left
+ * for the history to describe. The route wraps this call in a transaction so the
+ * two deletes commit or roll back together.
+ */
 export async function deleteAsset(db, id) {
+  await executeSqlWrite(db, 'DELETE FROM asset_events WHERE asset_id = $1', [id]);
   const rowCount = await executeSqlWrite(db, 'DELETE FROM assets WHERE id = $1', [id]);
   if (rowCount === 0) throw httpError('Asset not found', 404);
 }

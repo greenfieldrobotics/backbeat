@@ -13,6 +13,9 @@ export default function AssetsPage() {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(EMPTY);
   const [error, setError] = useState('');
+  const [historyAsset, setHistoryAsset] = useState(null);
+  const [historyEvents, setHistoryEvents] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   const load = () => api.getAssets().then(setAssets).finally(() => setLoading(false));
   useEffect(() => {
@@ -68,6 +71,26 @@ export default function AssetsPage() {
     catch (err) { alert(err.message); }
   };
 
+  const openHistory = async (a) => {
+    setHistoryAsset(a);
+    setHistoryLoading(true);
+    try { setHistoryEvents(await api.getAssetEvents(a.id)); }
+    finally { setHistoryLoading(false); }
+  };
+
+  // A one-line human description of what an event recorded — the raw row is mostly
+  // ids, and from_value/to_value only apply to some event types (§6.5 item 2).
+  const describeEvent = (e) => {
+    switch (e.event_type) {
+      case 'registered': return `Registered${e.location_name ? ` at ${e.location_name}` : ''}`;
+      case 'state_changed': return `${e.from_value ?? '—'} → ${e.to_value ?? '—'}`;
+      case 'moved': return `Moved to ${e.location_name ?? '—'}`;
+      case 'custody_changed': return `${e.from_value ?? 'Nobody'} → ${e.to_value ?? 'Nobody'}`;
+      case 'note': return e.notes ?? '';
+      default: return e.event_type;
+    }
+  };
+
   if (loading) return <div>Loading...</div>;
 
   return (
@@ -90,6 +113,7 @@ export default function AssetsPage() {
               <td>{a.location_name || '—'}</td>
               <td>
                 <button className="btn-secondary btn-sm" onClick={() => openEdit(a)}>Edit</button>{' '}
+                <button className="btn-secondary btn-sm" onClick={() => openHistory(a)}>History</button>{' '}
                 <button className="btn-danger btn-sm" onClick={() => handleDelete(a)}>Delete</button>
               </td>
             </tr>
@@ -137,6 +161,36 @@ export default function AssetsPage() {
             <div className="modal-actions">
               <button className="btn-secondary" onClick={() => setShowModal(false)}>Cancel</button>
               <button className="btn-primary" onClick={handleSave}>Save</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {historyAsset && (
+        <div className="modal-overlay" onClick={() => setHistoryAsset(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <h2>History — {historyAsset.serial_number || `Asset #${historyAsset.id}`}</h2>
+            {historyLoading ? <div>Loading...</div> : (
+              <table>
+                <thead>
+                  <tr><th>When</th><th>Event</th><th>Detail</th></tr>
+                </thead>
+                <tbody>
+                  {historyEvents.map(e => (
+                    <tr key={e.id}>
+                      <td>{new Date(e.occurred_at).toLocaleString()}</td>
+                      <td>{e.event_type}</td>
+                      <td>{describeEvent(e)}</td>
+                    </tr>
+                  ))}
+                  {historyEvents.length === 0 && (
+                    <tr><td colSpan="3" style={{ textAlign: 'center', color: '#888' }}>No history yet.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            )}
+            <div className="modal-actions">
+              <button className="btn-secondary" onClick={() => setHistoryAsset(null)}>Close</button>
             </div>
           </div>
         </div>
