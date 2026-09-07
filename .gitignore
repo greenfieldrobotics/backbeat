@@ -12,3 +12,6 @@ test-results/
 playwright-report/
 e2e-results.log
 dev-server.log
+
+# Handoff files between the host and container Claude sessions (see handoff/README.md)
+handoff/
