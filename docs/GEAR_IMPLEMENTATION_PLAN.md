@@ -330,6 +330,65 @@ G7.3's scaffold (`modules/_template/`) is worth doing whenever someone next adds
 
 ---
 
+## Phase 12 — Gear Setup: admin screens, self-seeding, and a label fix
+
+**Not in the original sequencing above.** Added 2026-09-07 after the owner tried the app and
+found the Assets page unusable: `asset_types` was empty and there was no screen to populate it.
+
+**Satisfies:** the product half of G1.2, G1.3, G1.4, G1.5 — each was already satisfied at the
+schema/API level (Phase 1) but not reachable without a curl call, which is not what "without a
+code change or a migration" means to the person actually running the app. Plus two fixes found
+along the way.
+
+Three pieces of work:
+
+1. **`asset_types` self-seeds.** `lifecycle_states` seeded inside `initializeDatabase()` since
+   Phase 1 (refills after any restore); `asset_types` only ever got rows from
+   `server/src/db/seed.js`, a separate manual script `initializeDatabase()` never calls — so a
+   restore (including the one the E2E suite does to the dev database, and the one every Gear
+   server test does via `truncateAllTables()` + `initializeDatabase()`) left it empty. Seeded
+   the same seed-only-when-empty way as `lifecycle_states`, with one deviation from the
+   canonical example list in requirements §1 ("Robots, batteries, VCUs, vehicles, RTK bases,
+   trailers, drones, laptops"): Robot, Battery, VCU and Trailer are the literal names dozens of
+   existing Gear tests create fresh via POST after that same truncate+reseed, expecting 201 —
+   seeding those names would 409 every one of them. The starter set actually seeded is the
+   remainder of that list no existing test claims: **Vehicle, RTK Base, Drone, Laptop.**
+   Capability flags are left at their column defaults (all false) — an admin widens them in the
+   new screen.
+2. **One "Gear Setup" screen, four tabs** — Types, Lifecycle States, Models, Parties — thin CRUD
+   over the Phase 1 endpoints, in `client/src/modules/gear/pages/GearSetupPage.tsx` following
+   Phase 6's conventions (typed API module, `ApiResult<T>`, per-page error boundary, vitest
+   coverage). Capability flag checkboxes carry an explanation of what each unlocks rather than
+   showing three bare booleans. The nav item is hidden from non-admins the same way
+   `/users` already is in `App.jsx` (a new `adminOnly` flag on a module's nav items, filtered
+   there); the actual gate is server-side.
+3. **Admin-gated mutations, not admin-gated reads.** `requireAdmin` now sits in front of
+   POST/PUT/DELETE on `/api/gear/asset-types`, `/api/gear/lifecycle-states`,
+   `/api/gear/asset-models`, and the core `/api/parties` — but not their GET routes, which stay
+   behind `requireAuth` alone. This deliberately does not match `core/users/routes.js`
+   (`router.use(requireAdmin)` on everything): the users list has no other consumer, but
+   registering an asset — any authenticated user, not just admins — reads asset types,
+   lifecycle states and parties to populate its own form. Gating the reads too would break
+   asset registration for non-admins.
+4. **Label transparency fix.** `labelService.js`'s `SYMBOLOGY_SPECS` had no `backgroundcolor`,
+   so bwip-js rendered a fully transparent background — every "white" pixel `(0,0,0,0)`, black
+   RGB with zero alpha. A browser composites that fine over its own white page, so it was
+   invisible on screen; a real decoder reading pixel data directly (a canvas `getImageData()`
+   call, or scanning a printed label back in) ignores alpha during binarization, so it reads as
+   solid black and does not decode — the same bug `e2e/helpers/photoFixture.js` had already
+   worked around for its own fixtures, still present in the generator those fixtures are meant
+   to represent. Fixed with `backgroundcolor: 'FFFFFF'` on both symbology specs, with a
+   regression test that renders the exact spec through bwip-js's raster encoder and asserts
+   every pixel is opaque.
+
+**Acceptance:** a fresh database has usable asset types with no manual step; an admin can add a
+type, a state, a model and a party entirely through the UI, and a newly-added type is
+immediately selectable when registering an asset; capability flags are editable with an
+explanation of what each unlocks; non-admins cannot reach the mutating endpoints; generated
+label PNGs are opaque, with a test proving it.
+
+---
+
 ## Sequencing rationale, and where this deviates from product priority
 
 The requirements document invites resequencing for technical reasons. Three deviations:

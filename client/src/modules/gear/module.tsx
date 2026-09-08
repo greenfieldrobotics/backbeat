@@ -10,11 +10,16 @@ import LinkPage from './pages/LinkPage';
 import MaintenancePage from './pages/MaintenancePage';
 import LabelsPage from './pages/LabelsPage';
 import LabelSheetPage from './pages/LabelSheetPage';
+import GearSetupPage from './pages/GearSetupPage';
 
 interface NavItem {
   to: string;
   label: string;
   end?: boolean;
+  // Hidden from the sidebar for non-admins (App.jsx filters on this) — the route
+  // itself still renders for anyone who navigates there directly; requireAdmin on
+  // the underlying mutation endpoints is the real gate (Phase 12).
+  adminOnly?: boolean;
 }
 
 interface RouteItem {
@@ -40,6 +45,7 @@ const gearModule: GearModule = {
     { to: '/gear/link', label: 'Link' },
     { to: '/gear/maintenance', label: 'Maintenance' },
     { to: '/gear/labels', label: 'Labels' },
+    { to: '/gear/setup', label: 'Gear Setup', adminOnly: true },
   ],
   routes: [
     { path: '/gear/assets', element: <AssetsPage /> },
@@ -49,6 +55,7 @@ const gearModule: GearModule = {
     { path: '/gear/link', element: <LinkPage /> },
     { path: '/gear/maintenance', element: <MaintenancePage /> },
     { path: '/gear/labels', element: <LabelsPage /> },
+    { path: '/gear/setup', element: <GearSetupPage /> },
     // Print-sheet route (Phase 7, G2.4) — reached only via LabelsPage's "Print
     // Sheet" button, never from the nav, so it isn't in `nav` above.
     { path: '/gear/labels/print', element: <LabelSheetPage /> },

@@ -7,6 +7,7 @@ import {
   updateLifecycleState,
   deleteLifecycleState,
 } from '../services/lifecycleStateService.js';
+import { requireAdmin } from '../../../core/auth/authMiddleware.js';
 
 const router = Router();
 
@@ -25,8 +26,8 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// POST /api/gear/lifecycle-states - Create a lifecycle state
-router.post('/', async (req, res) => {
+// POST /api/gear/lifecycle-states - Create a lifecycle state (Phase 12: admin-only)
+router.post('/', requireAdmin, async (req, res) => {
   const { name, sort_order, is_terminal, active } = req.body;
 
   try {
@@ -38,8 +39,8 @@ router.post('/', async (req, res) => {
   }
 });
 
-// PUT /api/gear/lifecycle-states/:id - Update a lifecycle state
-router.put('/:id', async (req, res) => {
+// PUT /api/gear/lifecycle-states/:id - Update a lifecycle state (Phase 12: admin-only)
+router.put('/:id', requireAdmin, async (req, res) => {
   const { name, sort_order, is_terminal, active } = req.body;
 
   try {
@@ -50,8 +51,8 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// DELETE /api/gear/lifecycle-states/:id - Delete a lifecycle state
-router.delete('/:id', async (req, res) => {
+// DELETE /api/gear/lifecycle-states/:id - Delete a lifecycle state (Phase 12: admin-only)
+router.delete('/:id', requireAdmin, async (req, res) => {
   try {
     await deleteLifecycleState(pool, req.params.id);
     res.status(204).send();

@@ -4,10 +4,13 @@
 //   - GET/PUT /api/gear/asset-types/:id/label-setting (per-type default, data-driven)
 // Printing to real equipment, DNS/redirect work and a ZPL proxy are all out of scope
 // (handoff/phase-7-prompt.md) — this only covers local generation.
+import bwipjs from 'bwip-js';
 import { truncateAllTables } from './setup/testSetup.js';
 import { request, app } from './helpers/testHelpers.js';
+import { isFullyOpaque } from './helpers/png.js';
 import { initializeDatabase } from '../src/db/schema.js';
 import pool from '../src/db/connection.js';
+import { SYMBOLOGY_SPECS } from '../src/modules/gear/services/labelService.js';
 
 async function lifecycleStateId(name) {
   const res = await request(app).get('/api/gear/lifecycle-states');
@@ -162,6 +165,53 @@ describe('Gear — Label generation (Phase 7)', () => {
       expect(get.status).toBe(404);
       const put = await request(app).put('/api/gear/asset-types/999999/label-setting').send({ default_symbology: 'qr' });
       expect(put.status).toBe(404);
+    });
+  });
+
+  // Phase 12 — labelService.js generated codes with no `backgroundcolor`, so bwip-js
+  // emitted a fully TRANSPARENT background: every "white" pixel was (0,0,0,0), black
+  // RGB with zero alpha. A browser composites that fine over its own white page (so
+  // the bug was invisible on screen, and none of the SVG-content assertions above
+  // caught it), but a real decoder reading pixel data directly — a canvas
+  // getImageData() call, or a printed label scanned back in — ignores alpha during
+  // binarization, so the code reads as solid black and does not decode. Asserted
+  // here by rendering the exact SYMBOLOGY_SPECS this service uses through bwip-js's
+  // raster encoder (toBuffer) and checking every pixel is fully opaque, so a future
+  // edit to SYMBOLOGY_SPECS that drops `backgroundcolor` fails a test instead of
+  // failing silently on a printed label months later.
+  describe('Generated labels are opaque, not transparent (regression)', () => {
+    function renderPng(symbology) {
+      const spec = SYMBOLOGY_SPECS[symbology];
+      return new Promise((resolve, reject) => {
+        bwipjs.toBuffer(
+          {
+            bcid: spec.bcid,
+            text: 'http://localhost:5173/a/GFR-OPACITY-TEST',
+            scale: spec.scale,
+            paddingwidth: spec.paddingwidth,
+            paddingheight: spec.paddingheight,
+            includetext: false,
+            backgroundcolor: spec.backgroundcolor,
+          },
+          (err, buffer) => (err ? reject(err) : resolve(buffer))
+        );
+      });
+    }
+
+    test('SYMBOLOGY_SPECS sets an explicit backgroundcolor for every symbology', () => {
+      for (const symbology of Object.keys(SYMBOLOGY_SPECS)) {
+        expect(SYMBOLOGY_SPECS[symbology].backgroundcolor).toBe('FFFFFF');
+      }
+    });
+
+    test('a QR label renders as a fully opaque PNG', async () => {
+      const png = await renderPng('qr');
+      expect(isFullyOpaque(png)).toBe(true);
+    });
+
+    test('a DataMatrix label renders as a fully opaque PNG', async () => {
+      const png = await renderPng('datamatrix');
+      expect(isFullyOpaque(png)).toBe(true);
     });
   });
 });

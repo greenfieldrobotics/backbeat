@@ -44,9 +44,23 @@ const DEFAULT_SYMBOLOGY = 'qr';
 // domain), because the physical size of a 2D code is a function of how much text
 // it encodes, not just its module count. See handoff/phase-7-response.md for the
 // measurements this was calibrated against.
-const SYMBOLOGY_SPECS = {
-  qr: { bcid: 'qrcode', scale: 3, paddingwidth: 4, paddingheight: 4 },
-  datamatrix: { bcid: 'datamatrix', scale: 2, paddingwidth: 3, paddingheight: 3 },
+// `backgroundcolor` matters as much as scale/padding: without it, bwip-js emits a
+// fully TRANSPARENT background (every "white" pixel is (0,0,0,0), black RGB with
+// zero alpha) instead of no background rect at all. A browser composites that
+// fine over its own white page, so the bug is invisible on screen — but anything
+// that reads pixel data without compositing first (a canvas 2D context's
+// getImageData(), which is what every real barcode/QR decoder actually uses, and
+// what a printed label becomes once it's opaque ink on paper) ignores alpha during
+// binarization, so the code reads as solid black and does not decode. Exactly the
+// bug e2e/helpers/photoFixture.js already had to work around for its label
+// fixtures (see that file's comment) — this fixes the same root cause in the
+// generator those fixtures are meant to be representative of.
+// Exported so tests can render the exact same spec through bwip-js's raster
+// encoder (toBuffer) and check pixel opacity directly, instead of re-deriving
+// these numbers by hand and risking drift from what this file actually sends.
+export const SYMBOLOGY_SPECS = {
+  qr: { bcid: 'qrcode', scale: 3, paddingwidth: 4, paddingheight: 4, backgroundcolor: 'FFFFFF' },
+  datamatrix: { bcid: 'datamatrix', scale: 2, paddingwidth: 3, paddingheight: 3, backgroundcolor: 'FFFFFF' },
 };
 
 /** The host printed on every label. Configuration, never a hardcoded string (§6.4) —
@@ -157,6 +171,7 @@ function renderSvg(symbology, text) {
     paddingwidth: spec.paddingwidth,
     paddingheight: spec.paddingheight,
     includetext: false,
+    backgroundcolor: spec.backgroundcolor,
   });
   return addPhysicalDimensions(svg);
 }

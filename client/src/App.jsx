@@ -34,7 +34,7 @@ function AppShell() {
             <div className="nav-section" key={m.key}>
               <div className="nav-section-title">{m.label}</div>
               <ul>
-                {m.nav.map(item => (
+                {m.nav.filter(item => !item.adminOnly || user.role === 'admin').map(item => (
                   <li key={item.to}>
                     <NavLink to={item.to} end={item.end}>{item.label}</NavLink>
                   </li>
