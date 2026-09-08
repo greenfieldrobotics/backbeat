@@ -8,6 +8,7 @@ import {
   deleteAssetModel,
 } from '../services/assetModelService.js';
 import { getComponentInstallationsForModel } from '../services/componentInstallationService.js';
+import { requireAdmin } from '../../../core/auth/authMiddleware.js';
 
 const router = Router();
 
@@ -39,8 +40,8 @@ router.get('/:id/component-installations', async (req, res) => {
   }
 });
 
-// POST /api/gear/asset-models - Create an asset model
-router.post('/', async (req, res) => {
+// POST /api/gear/asset-models - Create an asset model (Phase 12: admin-only)
+router.post('/', requireAdmin, async (req, res) => {
   const { asset_type_id, manufacturer, model_name, specs, active } = req.body;
 
   try {
@@ -52,8 +53,8 @@ router.post('/', async (req, res) => {
   }
 });
 
-// PUT /api/gear/asset-models/:id - Update an asset model
-router.put('/:id', async (req, res) => {
+// PUT /api/gear/asset-models/:id - Update an asset model (Phase 12: admin-only)
+router.put('/:id', requireAdmin, async (req, res) => {
   const { asset_type_id, manufacturer, model_name, specs, active } = req.body;
 
   try {
@@ -64,8 +65,8 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// DELETE /api/gear/asset-models/:id - Delete an asset model
-router.delete('/:id', async (req, res) => {
+// DELETE /api/gear/asset-models/:id - Delete an asset model (Phase 12: admin-only)
+router.delete('/:id', requireAdmin, async (req, res) => {
   try {
     await deleteAssetModel(pool, req.params.id);
     res.status(204).send();

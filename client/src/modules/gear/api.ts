@@ -3,9 +3,10 @@
 // task 7 — the rest of the client converts later).
 import { apiRequest, type ApiResult } from '../../core/httpClient';
 import type {
-  Asset, AssetType, LifecycleState, AssetEvent, AssetInput, AssetLink, AssetLinkInput,
-  AssetModel, MaintenanceOrder, MaintenanceOrderInput, ComponentInstallation, ComponentInstallationInput,
-  AssetLabel, LabelBatchResult, LabelSymbology, AssetTypeLabelSetting, PhotoScanInput, PhotoScanResult,
+  Asset, AssetType, AssetTypeInput, LifecycleState, LifecycleStateInput, AssetEvent, AssetInput,
+  AssetLink, AssetLinkInput, AssetModel, AssetModelInput, MaintenanceOrder, MaintenanceOrderInput,
+  ComponentInstallation, ComponentInstallationInput, AssetLabel, LabelBatchResult, LabelSymbology,
+  AssetTypeLabelSetting, PhotoScanInput, PhotoScanResult, Party, PartyInput,
 } from './types';
 
 export const gearApi = {
@@ -32,7 +33,28 @@ export const gearApi = {
 
   getAssetTypes: (): Promise<ApiResult<AssetType[]>> => apiRequest('/gear/asset-types'),
 
+  // Gear Setup (Phase 12, G1.2) — admin-only server-side (requireAdmin gates the
+  // mutations, not the GET above: registering an asset needs the list too).
+  createAssetType: (data: AssetTypeInput): Promise<ApiResult<AssetType>> =>
+    apiRequest('/gear/asset-types', { method: 'POST', body: JSON.stringify(data) }),
+
+  updateAssetType: (id: number, data: Partial<AssetTypeInput>): Promise<ApiResult<AssetType>> =>
+    apiRequest(`/gear/asset-types/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+
+  deleteAssetType: (id: number): Promise<ApiResult<null>> =>
+    apiRequest(`/gear/asset-types/${id}`, { method: 'DELETE' }),
+
   getLifecycleStates: (): Promise<ApiResult<LifecycleState[]>> => apiRequest('/gear/lifecycle-states'),
+
+  // Gear Setup (Phase 12, G1.3) — admin-only server-side, same split as asset types.
+  createLifecycleState: (data: LifecycleStateInput): Promise<ApiResult<LifecycleState>> =>
+    apiRequest('/gear/lifecycle-states', { method: 'POST', body: JSON.stringify(data) }),
+
+  updateLifecycleState: (id: number, data: Partial<LifecycleStateInput>): Promise<ApiResult<LifecycleState>> =>
+    apiRequest(`/gear/lifecycle-states/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+
+  deleteLifecycleState: (id: number): Promise<ApiResult<null>> =>
+    apiRequest(`/gear/lifecycle-states/${id}`, { method: 'DELETE' }),
 
   // Scan-to-locate (G3.3). Reuses the general PUT — sending only location_id leaves
   // every other field at its current value (see updateAsset() in assetService.js) — so
@@ -52,6 +74,30 @@ export const gearApi = {
     apiRequest(`/gear/asset-links/${id}/close`, { method: 'PATCH', body: JSON.stringify({}) }),
 
   getAssetModels: (): Promise<ApiResult<AssetModel[]>> => apiRequest('/gear/asset-models'),
+
+  // Gear Setup (Phase 12, G1.4) — admin-only server-side, same split as asset types.
+  createAssetModel: (data: AssetModelInput): Promise<ApiResult<AssetModel>> =>
+    apiRequest('/gear/asset-models', { method: 'POST', body: JSON.stringify(data) }),
+
+  updateAssetModel: (id: number, data: Partial<AssetModelInput>): Promise<ApiResult<AssetModel>> =>
+    apiRequest(`/gear/asset-models/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+
+  deleteAssetModel: (id: number): Promise<ApiResult<null>> =>
+    apiRequest(`/gear/asset-models/${id}`, { method: 'DELETE' }),
+
+  // Parties are core/shared (owner/custodian resolve to this one list, §5.3), not
+  // Gear-owned — these call /parties, not /gear/*. Gear Setup (Phase 12, G1.5) is
+  // their only typed consumer today; see the Party type's comment in types.ts.
+  getParties: (): Promise<ApiResult<Party[]>> => apiRequest('/parties'),
+
+  createParty: (data: PartyInput): Promise<ApiResult<Party>> =>
+    apiRequest('/parties', { method: 'POST', body: JSON.stringify(data) }),
+
+  updateParty: (id: number, data: Partial<PartyInput>): Promise<ApiResult<Party>> =>
+    apiRequest(`/parties/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+
+  deleteParty: (id: number): Promise<ApiResult<null>> =>
+    apiRequest(`/parties/${id}`, { method: 'DELETE' }),
 
   // An asset's service history (G6.1), newest first.
   getMaintenanceOrdersForAsset: (assetId: number): Promise<ApiResult<MaintenanceOrder[]>> =>

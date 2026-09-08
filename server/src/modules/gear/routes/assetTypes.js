@@ -8,6 +8,7 @@ import {
   deleteAssetType,
 } from '../services/assetTypeService.js';
 import { getLabelSetting, setDefaultSymbology } from '../services/labelService.js';
+import { requireAdmin } from '../../../core/auth/authMiddleware.js';
 
 const router = Router();
 
@@ -26,8 +27,8 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// POST /api/gear/asset-types - Create an asset type
-router.post('/', async (req, res) => {
+// POST /api/gear/asset-types - Create an asset type (Phase 12: admin-only)
+router.post('/', requireAdmin, async (req, res) => {
   const { name, description, supports_location, supports_linking, supports_maintenance, active } = req.body;
 
   try {
@@ -41,8 +42,8 @@ router.post('/', async (req, res) => {
   }
 });
 
-// PUT /api/gear/asset-types/:id - Update an asset type
-router.put('/:id', async (req, res) => {
+// PUT /api/gear/asset-types/:id - Update an asset type (Phase 12: admin-only)
+router.put('/:id', requireAdmin, async (req, res) => {
   const { name, description, supports_location, supports_linking, supports_maintenance, active } = req.body;
 
   try {
@@ -78,8 +79,8 @@ router.put('/:id/label-setting', async (req, res) => {
   }
 });
 
-// DELETE /api/gear/asset-types/:id - Delete an asset type
-router.delete('/:id', async (req, res) => {
+// DELETE /api/gear/asset-types/:id - Delete an asset type (Phase 12: admin-only)
+router.delete('/:id', requireAdmin, async (req, res) => {
   try {
     await deleteAssetType(pool, req.params.id);
     res.status(204).send();

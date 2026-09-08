@@ -332,4 +332,36 @@ export async function createGearTables(pool) {
     `);
     console.log('Seeded lifecycle states');
   }
+
+  // Seed a starter set of asset types (Phase 12, G1.2) — same seed-only-when-empty
+  // pattern as lifecycle_states above. Before this, asset_types only ever got rows
+  // from server/src/db/seed.js, a separate manual script never run by
+  // initializeDatabase() — so any restore (including the one truncateAllTables() +
+  // initializeDatabase() does between test runs, and the one the E2E suite does
+  // against the dev database) left the table empty and the Assets page unusable
+  // with no admin screen yet to repopulate it from.
+  //
+  // Deliberately NOT the canonical example list from requirements §1 ("Robots,
+  // batteries, VCUs, vehicles, RTK bases, trailers, drones, laptops"). Robot,
+  // Battery, VCU and Trailer are exactly the literal names dozens of existing Gear
+  // tests create fresh via POST after truncateAllTables()+initializeDatabase()
+  // (e.g. server/tests/18, 19, 23, 24, 25, 26, 27, 28, 29) expecting 201 — seeding
+  // those same names here would make every one of those calls 409 instead. This
+  // starter set is the remainder of that same canonical list (Vehicle, RTK Base,
+  // Drone, Laptop) that no existing test happens to claim, so the table is usable
+  // out of the box without touching a single existing test. See
+  // handoff/phase-12-response.md for the full collision list this was checked
+  // against. Capability flags are left at their column defaults (all false) —
+  // conservative on purpose; an admin widens them in the new Gear Setup screen.
+  const assetTypeCount = await pool.query('SELECT COUNT(*) FROM asset_types');
+  if (parseInt(assetTypeCount.rows[0].count) === 0) {
+    await pool.query(`
+      INSERT INTO asset_types (name) VALUES
+        ('Vehicle'),
+        ('RTK Base'),
+        ('Drone'),
+        ('Laptop')
+    `);
+    console.log('Seeded asset types');
+  }
 }

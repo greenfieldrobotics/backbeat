@@ -7,6 +7,7 @@ import {
   updateParty,
   deleteParty,
 } from './partyService.js';
+import { requireAdmin } from '../auth/authMiddleware.js';
 
 const router = Router();
 
@@ -25,8 +26,8 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// POST /api/parties - Create a party
-router.post('/', async (req, res) => {
+// POST /api/parties - Create a party (Phase 12: admin-only)
+router.post('/', requireAdmin, async (req, res) => {
   const { name, party_type, active } = req.body;
 
   try {
@@ -38,8 +39,8 @@ router.post('/', async (req, res) => {
   }
 });
 
-// PUT /api/parties/:id - Update a party
-router.put('/:id', async (req, res) => {
+// PUT /api/parties/:id - Update a party (Phase 12: admin-only)
+router.put('/:id', requireAdmin, async (req, res) => {
   const { name, party_type, active } = req.body;
 
   try {
@@ -50,8 +51,8 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// DELETE /api/parties/:id - Delete a party
-router.delete('/:id', async (req, res) => {
+// DELETE /api/parties/:id - Delete a party (Phase 12: admin-only)
+router.delete('/:id', requireAdmin, async (req, res) => {
   try {
     await deleteParty(pool, req.params.id);
     res.status(204).send();

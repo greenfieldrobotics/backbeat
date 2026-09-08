@@ -12,14 +12,40 @@ export interface Asset {
   notes: string | null;
 }
 
+// Capability flags gate real features (§2.3) — see GearSetupPage.tsx for the
+// explanations shown alongside each checkbox.
 export interface AssetType {
   id: number;
   name: string;
+  description: string | null;
+  supports_location: boolean;
+  supports_linking: boolean;
+  supports_maintenance: boolean;
+  active: boolean;
+}
+
+export interface AssetTypeInput {
+  name: string;
+  description?: string | null;
+  supports_location?: boolean;
+  supports_linking?: boolean;
+  supports_maintenance?: boolean;
+  active?: boolean;
 }
 
 export interface LifecycleState {
   id: number;
   name: string;
+  sort_order: number;
+  is_terminal: boolean;
+  active: boolean;
+}
+
+export interface LifecycleStateInput {
+  name: string;
+  sort_order?: number;
+  is_terminal?: boolean;
+  active?: boolean;
 }
 
 export interface AssetEvent {
@@ -68,6 +94,37 @@ export interface AssetModel {
   asset_type_id: number;
   manufacturer: string;
   model_name: string;
+  specs: Record<string, unknown> | null;
+  active: boolean;
+}
+
+// manufacturer is required (§6.5 item 3) — a model with no manufacturer is
+// unrecoverable, so the Gear Setup form enforces it client-side too.
+export interface AssetModelInput {
+  asset_type_id: number | string;
+  manufacturer: string;
+  model_name: string;
+  specs?: Record<string, unknown> | null;
+  active?: boolean;
+}
+
+// Parties are core/shared (owner/custodian resolve to this one list, requirements
+// §5.3) — not Gear-owned — but Gear Setup is currently their only typed consumer,
+// so the type lives here alongside the rest of Setup's data rather than in a new
+// core-only typed module (see gearApi's party functions in api.ts for the same call).
+export type PartyType = 'internal_entity' | 'employee' | 'customer' | 'vendor';
+
+export interface Party {
+  id: number;
+  name: string;
+  party_type: PartyType;
+  active: boolean;
+}
+
+export interface PartyInput {
+  name: string;
+  party_type: PartyType;
+  active?: boolean;
 }
 
 // A work order against an asset (G6.1) — open/in_progress/closed, with a service
